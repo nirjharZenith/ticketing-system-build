@@ -1,0 +1,246 @@
+import { Router, Response, Router as ExpressRouter } from 'express';
+import { AuthRequest, authenticateToken } from '../middleware/auth';
+import * as ticketService from '../services/ticketService';
+import * as emailService from '../services/emailService';
+import { query } from '../db';
+import { isValidUUID, validateTicketCreation, isValidPriority, isValidStatus, ValidationException, isValidPagination } from '../utils/validation';
+import { AuthenticationError, AuthorizationError, NotFoundError } from '../middleware/errorHandler';
+
+const router: ExpressRouter = Router();
+
+// Middleware to check org membership
+const checkOrgMembership = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const { org_id } = req.params;
+    
+    if (!req.user) {
+      throw new AuthenticationError('Unauthorized');
+    }
+
+    if (!isValidUUID(org_id)) {
+      throw new NotFoundError('Organization');
+    }
+
+    const result = await query(
+      'SELECT role FROM user_organisations WHERE user_id = $1 AND organisation_id = $2',
+      [req.user.id, org_id]
+    );
+
+    if (result.rows.length === 0) {
+      throw new AuthorizationError('Access denied');
+    }
+
+    req.user.org_role = result.rows[0].role;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Create ticket
+router.post('/:org_id/tickets', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const { org_id } = req.params;
+    const { title, description, priority } = req.body;
+
+    // Validate input
+    const validationErrors = validateTicketCreation({ title, description, priority });
+    if (validationErrors.length > 0) {
+      throw new ValidationException(validationErrors);
+    }
+
+    const ticket = await ticketService.createTicket(org_id, req.user!.id, title, description || '', priority || 'medium');
+    
+    // Send notification emails to organization members (fire and forget)
+    try {
+      const membersResult = await query(
+        `SELECT u.email, u.name FROM users u
+         INNER JOIN user_organisations uo ON u.id = uo.user_id
+         WHERE uo.organisation_id = $1 AND u.is_active = true AND u.id != $2`,
+        [org_id, req.user!.id]
+      );
+
+      const creatorResult = await query('SELECT name FROM users WHERE id = $1', [req.user!.id]);
+      const creatorName = creatorResult.rows[0]?.name || 'Unknown';
+
+      for (const member of membersResult.rows) {
+        emailService.sendTicketCreatedEmail(member.email, title, ticket.id, creatorName).catch((err) => {
+          console.error('[v0] Failed to send notification email:', err);
+        });
+      }
+    } catch (emailError) {
+      console.error('[v0] Error sending notification emails:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    res.status(201).json({ success: true, ticket });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get organization tickets
+router.get('/:org_id/tickets', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { org_id } = req.params;
+    const { status, priority, assignedTo } = req.query;
+
+    const filters: any = {};
+    if (status) filters.status = status;
+    if (priority) filters.priority = priority;
+    if (assignedTo) filters.assignedTo = assignedTo;
+
+    const tickets = await ticketService.getOrgTickets(org_id, filters);
+    res.json(tickets);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single ticket
+router.get('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { org_id, ticket_id } = req.params;
+    const ticket = await ticketService.getTicketById(ticket_id, org_id);
+    res.json(ticket);
+  } catch (error: any) {
+    res.status(404).json({ error: error.message });
+  }
+});
+
+// Update ticket
+router.patch('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { org_id, ticket_id } = req.params;
+    const updates = req.body;
+
+    // Check if user is admin or creator
+    const ticketResult = await query('SELECT creator_id, title FROM tickets WHERE id = $1', [ticket_id]);
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    if (req.user!.org_role !== 'admin' && ticketResult.rows[0].creator_id !== req.user!.id) {
+      return res.status(403).json({ error: 'Only creator or admin can update' });
+    }
+
+    const ticket = await ticketService.updateTicket(ticket_id, org_id, updates, req.user!.id);
+    
+    // Send notification emails about updates (fire and forget)
+    try {
+      if (updates.assigned_to) {
+        const assignedUserResult = await query('SELECT email FROM users WHERE id = $1', [updates.assigned_to]);
+        const userResult = await query('SELECT name FROM users WHERE id = $1', [req.user!.id]);
+        
+        if (assignedUserResult.rows.length > 0) {
+          const assignedEmail = assignedUserResult.rows[0].email;
+          const updaterName = userResult.rows[0]?.name || 'Unknown';
+          
+          emailService.sendAssignmentEmail(
+            assignedEmail,
+            ticketResult.rows[0].title,
+            ticket_id,
+            updaterName
+          ).catch((err) => {
+            console.error('[v0] Failed to send assignment email:', err);
+          });
+        }
+      }
+
+      // Notify organization members about status/priority changes
+      if (updates.status || updates.priority) {
+        const membersResult = await query(
+          `SELECT u.email, u.name FROM users u
+           INNER JOIN user_organisations uo ON u.id = uo.user_id
+           WHERE uo.organisation_id = $1 AND u.is_active = true AND u.id != $2`,
+          [org_id, req.user!.id]
+        );
+
+        const updaterResult = await query('SELECT name FROM users WHERE id = $1', [req.user!.id]);
+        const updaterName = updaterResult.rows[0]?.name || 'Unknown';
+        const changes = JSON.stringify(updates);
+
+        for (const member of membersResult.rows) {
+          emailService.sendTicketUpdatedEmail(
+            member.email,
+            ticketResult.rows[0].title,
+            ticket_id,
+            updaterName,
+            changes
+          ).catch((err) => {
+            console.error('[v0] Failed to send update email:', err);
+          });
+        }
+      }
+    } catch (emailError) {
+      console.error('[v0] Error sending notification emails:', emailError);
+    }
+
+    res.json(ticket);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete ticket (admin only)
+router.delete('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { org_id, ticket_id } = req.params;
+
+    if (req.user!.org_role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can delete' });
+    }
+
+    const success = await ticketService.deleteTicket(ticket_id, org_id);
+
+    if (!success) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get ticket activity
+router.get('/:org_id/tickets/:ticket_id/activity', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { ticket_id } = req.params;
+    const activity = await ticketService.getTicketActivity(ticket_id);
+    res.json(activity);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add attachment
+router.post('/:org_id/tickets/:ticket_id/attachments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { org_id, ticket_id } = req.params;
+    const { filename, fileUrl } = req.body;
+
+    if (!filename || !fileUrl) {
+      return res.status(400).json({ error: 'Filename and fileUrl required' });
+    }
+
+    const attachment = await ticketService.addAttachment(ticket_id, filename, fileUrl, req.user!.id);
+    res.status(201).json(attachment);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Get ticket attachments
+router.get('/:org_id/tickets/:ticket_id/attachments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+  try {
+    const { ticket_id } = req.params;
+    const attachments = await ticketService.getTicketAttachments(ticket_id);
+    res.json(attachments);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;

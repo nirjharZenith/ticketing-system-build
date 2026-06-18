@@ -1,0 +1,143 @@
+ticketing-system/
+├── 📄 README.md                          # Project overview and getting started
+├── 📄 package.json                       # Monorepo workspace configuration
+├── 📄 tsconfig.json                      # Root TypeScript configuration
+├── 📄 .gitignore                         # Git ignore rules
+├── 📄 docker-compose.yml                 # Docker local development setup
+│
+├── 📁 backend/                           # Express.js API Server
+│   ├── 📄 package.json                   # Backend dependencies
+│   ├── 📄 tsconfig.json                  # Backend TypeScript config
+│   ├── 📄 .env.example                   # Environment variables template
+│   ├── 📄 Dockerfile                     # Docker container config
+│   │
+│   └── 📁 src/                           # Source code
+│       ├── 📄 index.ts                   # Server entry point
+│       │
+│       ├── 📁 config/                    # Configuration utilities
+│       │   └── (Configuration files)
+│       │
+│       ├── 📁 db/                        # Database layer
+│       │   ├── 📄 index.ts               # Connection pool
+│       │   └── 📄 schema.sql             # PostgreSQL schema
+│       │
+│       ├── 📁 middleware/                # Express middleware
+│       │   └── 📄 auth.ts                # JWT authentication
+│       │
+│       ├── 📁 routes/                    # API endpoints
+│       │   ├── 📄 auth.ts                # Auth endpoints
+│       │   ├── 📄 organizations.ts       # Org management
+│       │   ├── 📄 tickets.ts             # Ticket CRUD
+│       │   └── 📄 uploads.ts             # File uploads
+│       │
+│       ├── 📁 services/                  # Business logic
+│       │   ├── 📄 authService.ts         # Auth logic
+│       │   ├── 📄 orgService.ts          # Org operations
+│       │   ├── 📄 ticketService.ts       # Ticket operations
+│       │   ├── 📄 emailService.ts        # Email notifications
+│       │   └── 📄 fileService.ts         # File handling
+│       │
+│       └── 📁 utils/                     # Helper utilities
+│           └── (Utility functions)
+│
+├── 📁 frontend/                          # React SPA Client
+│   ├── 📄 package.json                   # Frontend dependencies
+│   ├── 📄 tsconfig.json                  # Frontend TypeScript config
+│   ├── 📄 Dockerfile                     # Docker container config
+│   │
+│   ├── 📁 public/                        # Static assets
+│   │   ├── 📄 index.html                 # Main HTML file
+│   │   └── 🖼️ [images]                   # Static images and icons
+│   │
+│   └── 📁 src/                           # React source code
+│       ├── 📄 index.tsx                  # React entry point
+│       ├── 📄 App.tsx                    # Main app component with routing
+│       ├── 📄 index.css                  # Global styles
+│       │
+│       ├── 📁 pages/                     # Page components (routes)
+│       │   ├── 📄 LoginPage.tsx          # Login page
+│       │   ├── 📄 RegisterPage.tsx       # Registration page
+│       │   ├── 📄 DashboardPage.tsx      # Main dashboard
+│       │   ├── 📄 TicketsPage.tsx        # Tickets list page
+│       │   ├── 📄 TicketDetailPage.tsx   # Individual ticket page
+│       │   └── 📄 AdminMembersPage.tsx   # Member management page
+│       │
+│       ├── 📁 context/                   # React Context providers
+│       │   └── 📄 AuthContext.tsx        # Authentication state
+│       │
+│       ├── 📁 services/                  # API integration
+│       │   └── 📄 api.ts                 # Axios API client
+│       │
+│       ├── 📁 styles/                    # CSS stylesheets
+│       │   ├── 📄 auth.css               # Auth pages styling
+│       │   ├── 📄 dashboard.css          # Dashboard styling
+│       │   ├── 📄 tickets.css            # Tickets page styling
+│       │   ├── 📄 ticket-detail.css      # Ticket detail styling
+│       │   └── 📄 admin.css              # Admin panel styling
+│       │
+│       ├── 📁 components/                # Reusable components
+│       │   └── (Component files)
+│       │
+│       └── 📁 utils/                     # Helper utilities
+│           └── (Utility functions)
+│
+└── 📁 docs/                              # Documentation
+    ├── 📄 README.md                      # Documentation index
+    ├── 📄 QUICK_START.md                 # Quick start guide
+    ├── 📄 SETUP.md                       # Setup instructions
+    ├── 📄 DEVELOPMENT.md                 # Development guide
+    ├── 📄 CONTRIBUTING.md                # Contributing guidelines
+    ├── 📄 ARCHITECTURE.md                # System architecture
+    ├── 📄 FOLDER_STRUCTURE.md            # Folder structure guide
+    └── 📄 API.md                         # API documentation
+
+═══════════════════════════════════════════════════════════════════════════════
+
+KEY FILES & DIRECTORIES
+
+📁 backend/src/db/schema.sql
+   PostgreSQL database schema with all tables, indexes, and constraints
+   Auto-loaded on backend startup
+
+📁 frontend/src/context/AuthContext.tsx
+   Global authentication state management using React Context
+   Provides user data and auth functions to entire app
+
+📁 backend/src/services/
+   Core business logic separated by domain
+   Handles all database operations and business rules
+
+📁 frontend/src/pages/
+   Route-based page components
+   Each file = one major page/view in the application
+
+📁 docs/
+   Comprehensive documentation
+   Start with docs/README.md for navigation
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ARCHITECTURE SUMMARY
+
+Monorepo Structure:
+├── Backend (Express.js + PostgreSQL)
+├── Frontend (React + React Router)
+└── Documentation (Comprehensive guides)
+
+Technology Stack:
+- Backend: Express.js, TypeScript, PostgreSQL, JWT
+- Frontend: React 19, React Router, Axios, CSS
+- DevOps: Docker, Docker Compose, pnpm workspaces
+
+═══════════════════════════════════════════════════════════════════════════════
+
+QUICK COMMANDS
+
+pnpm install --recursive      # Install all dependencies
+pnpm backend:dev              # Start backend in dev mode
+pnpm frontend:dev             # Start frontend in dev mode
+pnpm dev                       # Start all services in dev mode
+docker-compose up -d          # Start with Docker
+docker-compose down           # Stop Docker services
+
+═══════════════════════════════════════════════════════════════════════════════
