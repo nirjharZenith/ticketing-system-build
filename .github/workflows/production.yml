@@ -136,13 +136,13 @@ jobs:
       - name: Trigger Render Deploy Hook
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: curl -X POST -d "" $RENDER_DEPLOY_HOOK_URL
+        run: curl -X POST -d "" "$RENDER_DEPLOY_HOOK_URL"
 
       - name: Smoke Test Backend
         run: |
           echo "Waiting for Render to pull new image and deploy..."
           sleep 60
-          curl -f ${{ secrets.BACKEND_PROD_URL }}/api/auth/me || exit 1
+          curl -f "${{ secrets.BACKEND_PROD_URL }}/api/auth/me" || exit 1
 
   deploy-frontend:
     name: Deploy Frontend to Vercel
@@ -170,4 +170,4 @@ jobs:
       - name: Smoke Test Frontend
         run: |
           sleep 10
-          curl -f ${{ secrets.FRONTEND_PROD_URL }} || exit 1
+          curl -f "${{ secrets.FRONTEND_PROD_URL }}" || exit 1
