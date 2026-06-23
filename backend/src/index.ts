@@ -16,11 +16,14 @@ const startServer = async () => {
     logger.info('[server] Waiting for database connection...');
     await initializeDatabase();
     logger.info('[server] Database ready');
-    
     server = app.listen(PORT, () => {
       logger.info(`[server] Backend running on http://localhost:${PORT}`);
       logger.info(`[server] Health check: http://localhost:${PORT}/api/health`);
     });
+
+    // Initialize Socket.io
+    const { initializeSocket } = await import('./services/socketService');
+    initializeSocket(server);
 
     const shutdown = async (signal: string) => {
       logger.info(`[server] Received ${signal}. Starting graceful shutdown...`);

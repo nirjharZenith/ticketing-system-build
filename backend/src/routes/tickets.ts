@@ -6,6 +6,7 @@ import { query } from '../db';
 import { isValidUUID, validateTicketCreation, isValidPriority, isValidStatus, ValidationException, isValidPagination } from '../utils/validation';
 import { AuthenticationError, AuthorizationError, NotFoundError } from '../middleware/errorHandler';
 import { createGithubIssueComment } from '../services/githubIssueService';
+import { emitToOrg } from '../services/socketService';
 
 const router: ExpressRouter = Router();
 
@@ -74,6 +75,7 @@ router.post('/:org_id/tickets', authenticateToken, checkOrgMembership, async (re
       // Don't fail the request if email fails
     }
 
+    emitToOrg(org_id, 'ticket:created', ticket);
     res.status(201).json({ success: true, ticket });
   } catch (error) {
     next(error);
@@ -220,6 +222,7 @@ router.patch('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembershi
       console.error('[v0] Error sending notification emails:', emailError);
     }
 
+    emitToOrg(org_id, 'ticket:updated', ticket);
     res.json(ticket);
 });
 
@@ -237,6 +240,7 @@ router.delete('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembersh
     throw new NotFoundError('Ticket');
   }
 
+  emitToOrg(org_id, 'ticket:deleted', { id: ticket_id });
   res.json({ success: true });
 });
 
@@ -323,7 +327,7 @@ router.get('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMe
 // Add ticket comment
 router.post('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response, next: any) => {
   try {
-    const { ticket_id } = req.params;
+    const { org_id, ticket_id } = req.params;
     const { comment } = req.body;
 
     if (!comment || typeof comment !== 'string' || !comment.trim()) {
@@ -354,6 +358,7 @@ router.post('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgM
       }
     }
 
+    emitToOrg(org_id, 'ticket:commented', { ticket_id, comment: createdComment });
     res.status(201).json(createdComment);
   } catch (error) {
     next(error);

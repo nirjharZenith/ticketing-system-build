@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import ImageUploader, { ImagePreview } from '../components/ImageUploader';
 import { Button, Input, Select, Textarea, Alert, Card, Badge } from '../components/ui';
+import { useSocket } from '../context/SocketContext';
 import { ticketAPI, getApiErrorMessage } from '../services/api';
 import '../styles/tickets.css';
 
@@ -32,12 +33,9 @@ const TicketsPage: React.FC = () => {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadTickets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [org_id, statusFilter, priorityFilter]);
+  const { socket, joinOrg, leaveOrg } = useSocket();
 
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
     if (!org_id) return;
     setLoading(true);
     try {
@@ -53,7 +51,37 @@ const TicketsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [org_id, statusFilter, priorityFilter]);
+
+  useEffect(() => {
+    loadTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org_id, statusFilter, priorityFilter]);
+
+  useEffect(() => {
+    if (org_id) {
+      joinOrg(org_id);
+      return () => leaveOrg(org_id);
+    }
+  }, [org_id, joinOrg, leaveOrg]);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleEvent = () => {
+      loadTickets();
+    };
+
+    socket.on('ticket:created', handleEvent);
+    socket.on('ticket:updated', handleEvent);
+    socket.on('ticket:deleted', handleEvent);
+
+    return () => {
+      socket.off('ticket:created', handleEvent);
+      socket.off('ticket:updated', handleEvent);
+      socket.off('ticket:deleted', handleEvent);
+    };
+  }, [socket, org_id, loadTickets]); // re-run if socket changes
 
   const clearImages = () => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));

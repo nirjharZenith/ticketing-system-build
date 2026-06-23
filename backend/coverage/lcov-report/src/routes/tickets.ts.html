@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">52.69% </span>
+                <span class="strong">53.48% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>88/167</span>
+                <span class='fraction'>92/172</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">54.65% </span>
+                <span class="strong">55.42% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>88/161</span>
+                <span class='fraction'>92/166</span>
             </div>
         
             
@@ -426,7 +426,13 @@
 <a name='L361'></a><a href='#L361'>361</a>
 <a name='L362'></a><a href='#L362'>362</a>
 <a name='L363'></a><a href='#L363'>363</a>
-<a name='L364'></a><a href='#L364'>364</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
+<a name='L364'></a><a href='#L364'>364</a>
+<a name='L365'></a><a href='#L365'>365</a>
+<a name='L366'></a><a href='#L366'>366</a>
+<a name='L367'></a><a href='#L367'>367</a>
+<a name='L368'></a><a href='#L368'>368</a>
+<a name='L369'></a><a href='#L369'>369</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -503,6 +509,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -649,6 +656,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -666,6 +674,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -782,6 +791,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -797,6 +807,7 @@ import { query } from '../db';
 import { isValidUUID, validateTicketCreation, isValidPriority, isValidStatus, ValidationException, isValidPagination } from '../utils/validation';
 import { AuthenticationError, AuthorizationError, NotFoundError } from '../middleware/errorHandler';
 import { createGithubIssueComment } from '../services/githubIssueService';
+import { emitToOrg } from '../services/socketService';
 &nbsp;
 const router: ExpressRouter = Router();
 &nbsp;
@@ -865,6 +876,7 @@ router.post('/:org_id/tickets', authenticateToken, checkOrgMembership, async (re
       // Don't fail the request if email fails
     }
 &nbsp;
+    emitToOrg(org_id, 'ticket:created', ticket);
     res.status(201).json({ success: true, ticket });
   } catch (error) {
     next(error);
@@ -1011,6 +1023,7 @@ router.patch('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembershi
 <span class="cstat-no" title="statement not covered" >      console.error('[v0] Error sending notification emails:', emailError);</span>
     }
 &nbsp;
+    emitToOrg(org_id, 'ticket:updated', ticket);
     res.json(ticket);
 });
 &nbsp;
@@ -1028,6 +1041,7 @@ router.delete('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembersh
     throw new NotFoundError('Ticket');
   }
 &nbsp;
+  emitToOrg(org_id, 'ticket:deleted', { id: ticket_id });
   res.json({ success: true });
 });
 &nbsp;
@@ -1114,7 +1128,7 @@ router.get('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMe
 // Add ticket comment
 router.post('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMembership, <span class="fstat-no" title="function not covered" >async </span>(req: AuthRequest, res: Response, next: any) =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const { ticket_id } = <span class="cstat-no" title="statement not covered" >req.params;</span>
+    const { org_id, ticket_id } = <span class="cstat-no" title="statement not covered" >req.params;</span>
     const { comment } = <span class="cstat-no" title="statement not covered" >req.body;</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (!comment || typeof comment !== 'string' || !comment.trim()) {</span>
@@ -1145,6 +1159,7 @@ router.post('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgM
       }
     }
 &nbsp;
+<span class="cstat-no" title="statement not covered" >    emitToOrg(org_id, 'ticket:commented', { ticket_id, comment: createdComment });</span>
 <span class="cstat-no" title="statement not covered" >    res.status(201).json(createdComment);</span>
   } catch (error) {
 <span class="cstat-no" title="statement not covered" >    next(error);</span>
@@ -1159,7 +1174,7 @@ export default router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-23T05:12:00.271Z
+                at 2026-06-23T05:42:59.568Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

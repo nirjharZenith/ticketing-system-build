@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import ImageUploader, { ImagePreview } from '../components/ImageUploader';
 import { ticketAPI, getApiErrorMessage } from '../services/api';
+import { useSocket } from '../context/SocketContext';
 import { Badge, Button, Textarea } from '../components/ui';
 import '../styles/ticket-detail.css';
 import '../styles/image-uploader.css';
@@ -73,12 +74,9 @@ const TicketDetailPage: React.FC = () => {
   const [newDescription, setNewDescription] = useState('');
   const [updatingDescription, setUpdatingDescription] = useState(false);
 
-  useEffect(() => {
-    loadTicketDetails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [org_id, ticket_id]);
+  const { socket, joinOrg, leaveOrg } = useSocket();
 
-  const loadTicketDetails = async () => {
+  const loadTicketDetails = useCallback(async () => {
     if (!org_id || !ticket_id) return;
 
     try {
@@ -101,7 +99,43 @@ const TicketDetailPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [org_id, ticket_id]);
+
+  useEffect(() => {
+    loadTicketDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org_id, ticket_id]);
+
+  useEffect(() => {
+    if (org_id) {
+      joinOrg(org_id);
+      return () => leaveOrg(org_id);
+    }
+  }, [org_id, joinOrg, leaveOrg]);
+
+  useEffect(() => {
+    if (!socket || !ticket_id) return;
+    
+    const handleUpdate = (updatedTicket: any) => {
+      if (updatedTicket.id === ticket_id) {
+        loadTicketDetails();
+      }
+    };
+    
+    const handleComment = (data: any) => {
+      if (data.ticket_id === ticket_id) {
+        loadTicketDetails();
+      }
+    };
+
+    socket.on('ticket:updated', handleUpdate);
+    socket.on('ticket:commented', handleComment);
+    
+    return () => {
+      socket.off('ticket:updated', handleUpdate);
+      socket.off('ticket:commented', handleComment);
+    };
+  }, [socket, ticket_id, loadTicketDetails]);
 
   const handleStatusUpdate = async () => {
     if (!ticket || newStatus === ticket.status) {
