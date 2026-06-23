@@ -1,16 +1,24 @@
 import express, { Express } from 'express';
 import cors from 'cors';
 import path from 'path';
+import helmet from 'helmet';
+import compression from 'compression';
 import authRoutes from './routes/auth';
 import orgRoutes from './routes/organizations';
 import ticketRoutes from './routes/tickets';
 import uploadRoutes from './routes/uploads';
 import { errorHandler } from './middleware/errorHandler';
-import { requestLogger, getHealthMetrics } from './middleware/logger';
+import { requestLogger, getHealthMetrics, requestIdMiddleware } from './middleware/logger';
 import { globalRateLimiter, authRateLimiter } from './middleware/rateLimiter';
 
 export function createApp(): Express {
   const app: Express = express();
+
+  app.use(requestIdMiddleware);
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  }));
+  app.use(compression());
 
   // Request logging
   app.use(requestLogger);
@@ -33,7 +41,13 @@ export function createApp(): Express {
   app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
   // Static file serving
-  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  const uploadsDir = path.join(__dirname, '../uploads');
+  import('fs').then(fs => {
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+  });
+  app.use('/uploads', express.static(uploadsDir));
 
   // Routes
   app.use('/api/auth', authRoutes);
@@ -42,8 +56,14 @@ export function createApp(): Express {
   app.use('/api/uploads', uploadRoutes);
 
   // Health check
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', metrics: getHealthMetrics() });
+  app.get('/api/health', async (_req, res) => {
+    try {
+      const { checkDatabaseConnection } = await import('./db');
+      await checkDatabaseConnection();
+      res.json({ status: 'ok', database: 'connected', metrics: getHealthMetrics() });
+    } catch {
+      res.status(503).json({ status: 'degraded', database: 'disconnected', metrics: getHealthMetrics() });
+    }
   });
 
   // 404 fallthrough

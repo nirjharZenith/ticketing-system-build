@@ -4,6 +4,7 @@
   "private": true,
   "description": "Full-stack ticketing application",
   "scripts": {
+    "dev": "concurrently -k -n backend,frontend -c blue,magenta \"pnpm dev:backend\" \"pnpm dev:frontend\"",
     "dev:backend": "pnpm --dir backend dev",
     "dev:frontend": "pnpm --dir frontend start",
     "build:backend": "pnpm --dir backend build",
@@ -11,5 +12,9 @@
     "build": "pnpm build:backend && pnpm build:frontend",
     "test": "pnpm --dir backend test",
     "test:ci": "pnpm --dir backend test:ci"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "concurrently": "^9.2.1"
   }
 }

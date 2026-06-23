@@ -6,18 +6,26 @@ import { AuthenticationError, ConflictError } from '../middleware/errorHandler';
 
 const JWT_EXPIRY = '24h';
 
-const getJwtSecret = () => process.env.JWT_SECRET || 'your-secret-key';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('FATAL: JWT_SECRET environment variable is missing.');
+  }
+  return secret;
+};
 
 export const createUser = async (email: string, name: string, password: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedName = name.trim();
   const hashedPassword = await bcryptjs.hash(password, 10);
   const userId = uuidv4();
 
   try {
     await query(
       'INSERT INTO users (id, email, name, password_hash) VALUES ($1, $2, $3, $4)',
-      [userId, email, name, hashedPassword]
+      [userId, normalizedEmail, normalizedName, hashedPassword]
     );
-    return { id: userId, email, name };
+    return { id: userId, email: normalizedEmail, name: normalizedName };
   } catch (error: any) {
     if (error.code === '23505') {
       throw new ConflictError('Email already exists');
@@ -64,11 +72,20 @@ export const authenticateUser = async (email: string, password: string) => {
 };
 
 export const getUserById = async (userId: string) => {
-  const result = await query('SELECT id, email, name, created_at FROM users WHERE id = $1', [userId]);
+  const result = await query(
+    'SELECT id, email, name, created_at FROM users WHERE id = $1 AND is_active = true',
+    [userId]
+  );
   if (result.rows.length === 0) {
-    throw new Error('User not found');
+    throw new AuthenticationError('User not found or inactive');
   }
   return result.rows[0];
+};
+
+export const getUserFromToken = async (token: string) => {
+  const decoded = verifyToken(token) as { id: string; email: string };
+  const user = await getUserById(decoded.id);
+  return user;
 };
 
 export const verifyToken = (token: string) => {

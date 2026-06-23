@@ -139,10 +139,10 @@ describe('isValidPriority', () => {
 });
 
 // ---------------------------------------------------------------------------
-// isValidStatus – valid values: open | in_progress | resolved | closed
+// isValidStatus – valid values: open | in_progress | in_verification | resolved | closed
 // ---------------------------------------------------------------------------
 describe('isValidStatus', () => {
-  it.each(['open', 'in_progress', 'resolved', 'closed'])('accepts "%s"', (s) => {
+  it.each(['open', 'in_progress', 'in_verification', 'resolved', 'closed'])('accepts "%s"', (s) => {
     expect(isValidStatus(s)).toBe(true);
   });
 

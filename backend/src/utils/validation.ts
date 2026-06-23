@@ -52,7 +52,7 @@ export const isValidPriority = (priority: string): boolean => {
 
 // Status validation
 export const isValidStatus = (status: string): boolean => {
-  return ['open', 'in_progress', 'resolved', 'closed'].includes(status.toLowerCase());
+  return ['open', 'in_progress', 'in_verification', 'resolved', 'closed'].includes(status.toLowerCase());
 };
 
 // Organization name validation

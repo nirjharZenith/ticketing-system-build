@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Button, Input, Alert } from '../components/ui';
 import '../styles/auth.css';
 
 const RegisterPage: React.FC = () => {
@@ -32,7 +33,7 @@ const RegisterPage: React.FC = () => {
 
     try {
       await register(email, name, password, confirmPassword);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -43,65 +44,25 @@ const RegisterPage: React.FC = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>Register</h1>
+        <div className="auth-brand">
+          <span className="auth-brand-icon">T</span>
+        </div>
+        <h1>Create account</h1>
+        <p className="auth-subtitle">Get started with Zenith Tickets</p>
+
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="name">Name</label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="confirm-password">Confirm Password</label>
-            <input
-              id="confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {error && <div className="error-message">{error}</div>}
-
-          <button type="submit" disabled={loading} className="submit-btn">
-            {loading ? 'Registering...' : 'Register'}
-          </button>
+          <Input label="Email" id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={loading} placeholder="you@company.com" />
+          <Input label="Full name" id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required disabled={loading} placeholder="Jane Doe" />
+          <Input label="Password" id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} placeholder="••••••••" hint="Min 8 chars, uppercase, number, special character" />
+          <Input label="Confirm password" id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required disabled={loading} placeholder="••••••••" />
+          {error && <Alert>{error}</Alert>}
+          <Button type="submit" fullWidth disabled={loading}>
+            {loading ? 'Creating account...' : 'Create account'}
+          </Button>
         </form>
 
         <p className="auth-link">
-          Already have an account? <Link to="/login">Login here</Link>
+          Already have an account? <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>

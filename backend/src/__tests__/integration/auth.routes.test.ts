@@ -10,7 +10,7 @@ import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { mockQuery } from '../../__mocks__/db';
 import { buildTestApp } from '../helpers/testApp';
-import { TEST_USER, makeToken, bearerHeader } from '../helpers/tokenFactory';
+import { TEST_USER, TEST_USER_2, makeToken, bearerHeader } from '../helpers/tokenFactory';
 
 jest.mock('../../db');
 
@@ -164,6 +164,33 @@ describe('POST /api/auth/login', () => {
     const calledWith: string = mockQuery.mock.calls[0][1][0];
     expect(calledWith).toBe('alice@example.com');
   });
+
+  it('returns the matching user profile for each account login', async () => {
+    const hash = await bcryptjs.hash('StrongPass1!', 1);
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: TEST_USER.id, email: TEST_USER.email, name: 'Alice', password_hash: hash }],
+    });
+
+    const firstLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_USER.email, password: 'StrongPass1!' });
+
+    expect(firstLogin.body.user.email).toBe(TEST_USER.email);
+    expect(firstLogin.body.user.name).toBe('Alice');
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: TEST_USER_2.id, email: TEST_USER_2.email, name: 'Bob', password_hash: hash }],
+    });
+
+    const secondLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_USER_2.email, password: 'StrongPass1!' });
+
+    expect(secondLogin.body.user.email).toBe(TEST_USER_2.email);
+    expect(secondLogin.body.user.email).not.toBe(TEST_USER.email);
+    expect(secondLogin.body.user.name).toBe('Bob');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -171,6 +198,9 @@ describe('POST /api/auth/login', () => {
 // ---------------------------------------------------------------------------
 describe('GET /api/auth/me', () => {
   it('200 – returns user for a valid token', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: TEST_USER.id, email: TEST_USER.email }],
+    });
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: TEST_USER.id, email: TEST_USER.email, name: 'Alice', created_at: new Date() }],
     });
@@ -189,19 +219,19 @@ describe('GET /api/auth/me', () => {
     expect(res.status).toBe(401);
   });
 
-  it('403 – returns 403 for a malformed token', async () => {
+  it('401 – returns 401 for a malformed token', async () => {
     const res = await request(app)
       .get('/api/auth/me')
       .set('Authorization', 'Bearer totally.invalid.token');
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
-  it('403 – returns 403 for an expired token', async () => {
-    const expired = jwt.sign(TEST_USER, SECRET, { expiresIn: '0ms' });
+  it('401 – returns 401 for an expired token', async () => {
+    const expired = jwt.sign({ id: TEST_USER.id }, SECRET, { expiresIn: '-1h' });
     const res = await request(app)
       .get('/api/auth/me')
       .set('Authorization', bearerHeader(expired));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 });
 
@@ -209,13 +239,17 @@ describe('GET /api/auth/me', () => {
 // POST /api/auth/verify
 // ---------------------------------------------------------------------------
 describe('POST /api/auth/verify', () => {
-  it('200 – confirms a valid token', async () => {
+  it('200 – confirms a valid token and returns the current user', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: TEST_USER.id, email: TEST_USER.email, name: 'Alice', created_at: new Date() }],
+    });
     const token = makeToken(TEST_USER);
     const res = await request(app)
       .post('/api/auth/verify')
       .send({ token });
     expect(res.status).toBe(200);
     expect(res.body.valid).toBe(true);
+    expect(res.body.user.email).toBe(TEST_USER.email);
   });
 
   it('400 – returns 400 when token field is missing', async () => {

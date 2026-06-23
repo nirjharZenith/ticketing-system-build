@@ -12,7 +12,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading...</div>;
+    return (
+      <div className="loading-state" style={{ minHeight: '100vh' }}>
+        <div className="spinner" />
+        <p>Loading...</p>
+      </div>
+    );
   }
 
   if (!user) {
@@ -23,14 +28,15 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading...</div>;
-  }
-
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
+    return (
+      <div className="loading-state" style={{ minHeight: '100vh' }}>
+        <div className="spinner" />
+        <p>Loading...</p>
+      </div>
+    );
   }
 
   return <>{children}</>;

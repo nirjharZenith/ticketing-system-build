@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   title VARCHAR(255) NOT NULL,
   description TEXT,
   priority VARCHAR(50) DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  status VARCHAR(50) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+  status VARCHAR(50) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'in_verification', 'resolved', 'closed')),
   assigned_to UUID REFERENCES users(id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -66,6 +66,31 @@ CREATE TABLE IF NOT EXISTS ticket_activity (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ticket comments table
+CREATE TABLE IF NOT EXISTS ticket_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  comment TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Alter existing tickets table for github integration if columns do not exist
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_issue_number INTEGER;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_issue_url VARCHAR(512);
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_repo_owner VARCHAR(255);
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_repo_name VARCHAR(255);
+
+-- Ensure the check constraint on existing tables allows 'in_verification'
+DO $$
+BEGIN
+  ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_status_check;
+  ALTER TABLE tickets ADD CONSTRAINT tickets_status_check CHECK (status IN ('open', 'in_progress', 'in_verification', 'resolved', 'closed'));
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END $$;
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_user_organisations_user_id ON user_organisations(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_organisations_org_id ON user_organisations(organisation_id);
@@ -74,3 +99,4 @@ CREATE INDEX IF NOT EXISTS idx_tickets_creator_id ON tickets(creator_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_assigned_to ON tickets(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket_id ON ticket_attachments(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_activity_ticket_id ON ticket_activity(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_comments_ticket_id ON ticket_comments(ticket_id);

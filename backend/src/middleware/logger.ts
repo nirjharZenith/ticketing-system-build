@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface RequestLog {
   timestamp: string;
@@ -14,8 +15,43 @@ export interface RequestLog {
 const logs: RequestLog[] = [];
 const MAX_LOGS = 1000;
 
+export const requestIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const reqId = req.headers['x-request-id'] || uuidv4();
+  req.headers['x-request-id'] = reqId;
+  res.setHeader('X-Request-ID', reqId);
+  (req as any).requestId = reqId;
+  next();
+};
+
+export const createLogger = (req?: Request | null) => {
+  const requestId = req ? (req as any).requestId : undefined;
+  
+  const formatLog = (level: string, message: string, meta?: any) => {
+    return JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level,
+      requestId,
+      message,
+      ...(meta && { meta })
+    });
+  };
+
+  return {
+    info: (msg: string, meta?: any) => console.log(formatLog('info', msg, meta)),
+    warn: (msg: string, meta?: any) => console.warn(formatLog('warn', msg, meta)),
+    error: (msg: string, meta?: any) => console.error(formatLog('error', msg, meta)),
+    debug: (msg: string, meta?: any) => {
+      if (process.env.NODE_ENV !== 'production') console.debug(formatLog('debug', msg, meta));
+    }
+  };
+};
+
+// Default app logger
+export const logger = createLogger();
+
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const startTime = Date.now();
+  const reqLogger = createLogger(req);
 
   // Capture the original send function
   const originalSend = res.send;
@@ -40,7 +76,6 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
       logs.shift();
     }
 
-    // Log to console in development
     if (process.env.NODE_ENV === 'development') {
       const statusColor =
         res.statusCode >= 500
@@ -49,10 +84,11 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
             ? '\x1b[33m'
             : '\x1b[32m';
       const reset = '\x1b[0m';
-
       console.log(
         `[v0] ${statusColor}${log.status}${reset} ${log.method} ${log.path} ${log.duration}ms`
       );
+    } else {
+      reqLogger.info('HTTP Request', log);
     }
 
     return res.send(data);

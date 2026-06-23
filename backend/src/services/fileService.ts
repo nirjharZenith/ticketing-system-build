@@ -1,81 +1,25 @@
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
 import type { RequestHandler } from 'express';
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req: any, file: any, cb: any) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req: any, file: any, cb: any) => {
-    const uniqueName = `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
-});
-
-const fileFilter = (req: any, file: any, cb: any) => {
-  // Allowed file types
-  const allowedMimes = [
-    'application/pdf',
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'text/plain',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/zip',
-  ];
-
-  if (allowedMimes.includes(file.mimetype)) {
+const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (ALLOWED_MIMES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`), false);
+    cb(new Error('Only JPEG, PNG, WebP, and GIF images are allowed'));
   }
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 5 * 1024 * 1024,
+    files: 4,
   },
 });
 
-export const uploadMiddleware: RequestHandler = upload.single('file');
+export const uploadImagesMiddleware: RequestHandler = upload.array('images', 4);
 
-export const getFileUrl = (filename: string): string => {
-  return `/uploads/${filename}`;
-};
-
-export const deleteFile = (filename: string): boolean => {
-  try {
-    const filepath = path.join(uploadsDir, filename);
-    if (fs.existsSync(filepath)) {
-      fs.unlinkSync(filepath);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('[v0] Error deleting file:', error);
-    return false;
-  }
-};
-
-export const getFilePath = (filename: string): string => {
-  return path.join(uploadsDir, filename);
-};
-
-export const fileExists = (filename: string): boolean => {
-  const filepath = path.join(uploadsDir, filename);
-  return fs.existsSync(filepath);
-};
+export const MAX_IMAGES_PER_TICKET = 4;

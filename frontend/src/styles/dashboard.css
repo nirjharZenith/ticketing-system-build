@@ -1,157 +1,66 @@
-.dashboard-container {
-  min-height: 100vh;
-  background-color: #f5f7fa;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-
-.dashboard-header {
-  background: white;
-  padding: 20px 40px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.dashboard-header h1 {
-  margin: 0;
-  color: #333;
-  font-size: 28px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-}
-
-.user-email {
-  color: #666;
-  font-size: 14px;
-}
-
-.logout-btn {
-  padding: 8px 16px;
-  background-color: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: background-color 0.3s;
-}
-
-.logout-btn:hover {
-  background-color: #c0392b;
-}
-
-.dashboard-main {
-  padding: 40px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
 .create-org-section {
-  background: white;
-  padding: 30px;
-  border-radius: 8px;
-  margin-bottom: 40px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.create-org-section h2 {
-  margin-top: 0;
-  color: #333;
-  font-size: 22px;
+  padding: 28px;
+  margin-bottom: 32px;
 }
 
 .create-org-form {
   display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
 }
 
-.create-org-form input {
+.create-org-form .form-group {
   flex: 1;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
+  min-width: 220px;
+  margin-bottom: 0;
 }
 
-.create-org-form input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+.orgs-section {
+  margin-top: 8px;
 }
 
-.create-btn {
-  padding: 12px 24px;
-  background-color: #667eea;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background-color 0.3s;
-}
-
-.create-btn:hover {
-  background-color: #5a6fd9;
-}
-
-.error-message {
-  color: #e74c3c;
-  background-color: #fadbd8;
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.orgs-section h2 {
-  color: #333;
-  font-size: 22px;
-  margin-top: 0;
-  margin-bottom: 20px;
+.orgs-section .section-title {
+  margin-bottom: 16px;
 }
 
 .orgs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
 }
 
 .org-card {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  padding: 24px;
+  position: relative;
 }
 
-.org-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+.org-icon {
+  font-size: 28px;
+  margin-bottom: 12px;
 }
 
 .org-card h3 {
-  margin: 0 0 10px;
-  color: #333;
-  font-size: 18px;
+  font-size: 17px;
+  margin-bottom: 6px;
 }
 
 .org-role {
-  margin: 0;
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 13px;
   text-transform: capitalize;
 }
 
-.no-orgs {
-  color: #999;
-  text-align: center;
-  padding: 40px;
-  font-size: 16px;
+.org-arrow {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  color: var(--color-text-light);
+  font-size: 18px;
+  transition: transform var(--transition);
+}
+
+.org-card:hover .org-arrow {
+  transform: translateX(4px);
+  color: var(--color-primary);
 }

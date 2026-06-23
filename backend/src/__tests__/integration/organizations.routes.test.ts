@@ -26,9 +26,7 @@ beforeEach(() => jest.clearAllMocks());
 describe('POST /api/orgs', () => {
   it('201 – creates an organization and returns it', async () => {
     mockQuery
-      // createOrganization: INSERT INTO organisations
       .mockResolvedValueOnce({ rows: [{ id: TEST_ORG_ID, name: 'ACME', created_at: new Date() }], rowCount: 1 })
-      // createOrganization: INSERT INTO user_organisations
       .mockResolvedValueOnce({ rows: [], rowCount: 1 });
 
     const res = await request(app)
@@ -101,19 +99,15 @@ describe('GET /api/orgs', () => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/orgs/:org_id/members – list members (admin only)
+// GET /api/orgs/:org_id/members – list members (all org members)
 // ---------------------------------------------------------------------------
 describe('GET /api/orgs/:org_id/members', () => {
-  it('200 – admin can list members', async () => {
-    // authorizeRole checks user_organisations for role = admin
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ role: 'admin' }],
-    });
-    // getOrganizationMembers query
+  it('200 – admin can list members with management access', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
     mockQuery.mockResolvedValueOnce({
       rows: [
         { id: TEST_USER.id, email: TEST_USER.email, name: 'Alice', role: 'admin' },
-        { id: TEST_USER_2.id, email: TEST_USER_2.email, name: 'Bob', role: 'member' },
+        { id: TEST_USER_2.id, email: TEST_USER_2.email, name: 'Bob', role: 'user' },
       ],
     });
 
@@ -122,13 +116,32 @@ describe('GET /api/orgs/:org_id/members', () => {
       .set('Authorization', bearerHeader(adminToken));
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toHaveLength(2);
+    expect(res.body.members).toHaveLength(2);
+    expect(res.body.access.canInviteMembers).toBe(true);
+    expect(res.body.access.canRemoveMembers).toBe(true);
   });
 
-  it('403 – non-admin cannot list members', async () => {
-    // authorizeRole finds the user as a 'member', not 'admin'
-    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'member' }] });
+  it('200 – regular members can list teammates read-only', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'user' }] });
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { id: TEST_USER.id, email: TEST_USER.email, name: 'Alice', role: 'admin' },
+        { id: TEST_USER_2.id, email: TEST_USER_2.email, name: 'Bob', role: 'user' },
+      ],
+    });
+
+    const res = await request(app)
+      .get(`/api/orgs/${TEST_ORG_ID}/members`)
+      .set('Authorization', bearerHeader(memberToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.members).toHaveLength(2);
+    expect(res.body.access.canInviteMembers).toBe(false);
+    expect(res.body.access.canRemoveMembers).toBe(false);
+  });
+
+  it('403 – non-members cannot list members', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
       .get(`/api/orgs/${TEST_ORG_ID}/members`)
@@ -147,41 +160,56 @@ describe('GET /api/orgs/:org_id/members', () => {
 // POST /api/orgs/:org_id/members – invite a member (admin only)
 // ---------------------------------------------------------------------------
 describe('POST /api/orgs/:org_id/members', () => {
-  it('201 – admin can invite a member', async () => {
-    // authorizeRole
+  it('201 – admin can add a new team member with credentials', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
-    // lookup invited user
-    mockQuery.mockResolvedValueOnce({ rows: [{ id: TEST_USER_2.id }] });
-    // INSERT user_organisations
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
 
     const res = await request(app)
       .post(`/api/orgs/${TEST_ORG_ID}/members`)
       .set('Authorization', bearerHeader(adminToken))
-      .send({ email: TEST_USER_2.email, role: 'member' });
+      .send({
+        email: 'new@example.com',
+        name: 'New User',
+        password: 'Password1!',
+        role: 'user',
+      });
 
     expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.member.email).toBe('new@example.com');
   });
 
-  it('400 – rejects an invalid email', async () => {
-    // authorizeRole
+  it('400 – rejects missing password', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
 
     const res = await request(app)
       .post(`/api/orgs/${TEST_ORG_ID}/members`)
       .set('Authorization', bearerHeader(adminToken))
-      .send({ email: 'not-valid', role: 'member' });
+      .send({ email: TEST_USER_2.email, name: 'Bob', role: 'user' });
 
     expect(res.status).toBe(400);
   });
 
-  it('403 – non-admin cannot invite', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'member' }] });
+  it('400 – rejects an invalid email', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
+
+    const res = await request(app)
+      .post(`/api/orgs/${TEST_ORG_ID}/members`)
+      .set('Authorization', bearerHeader(adminToken))
+      .send({ email: 'not-valid', name: 'Bob', password: 'Password1!', role: 'user' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('403 – regular members cannot invite teammates', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'user' }] });
 
     const res = await request(app)
       .post(`/api/orgs/${TEST_ORG_ID}/members`)
       .set('Authorization', bearerHeader(memberToken))
-      .send({ email: 'new@example.com', role: 'member' });
+      .send({ email: 'new@example.com', name: 'New', password: 'Password1!', role: 'user' });
 
     expect(res.status).toBe(403);
   });
@@ -192,9 +220,8 @@ describe('POST /api/orgs/:org_id/members', () => {
 // ---------------------------------------------------------------------------
 describe('DELETE /api/orgs/:org_id/members/:user_id', () => {
   it('200 – admin can remove a member', async () => {
-    // authorizeRole
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
-    // removeOrganizationMember
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'user' }] });
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
 
     const res = await request(app)
@@ -205,7 +232,6 @@ describe('DELETE /api/orgs/:org_id/members/:user_id', () => {
   });
 
   it('400 – cannot remove yourself from the org', async () => {
-    // authorizeRole
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
 
     const res = await request(app)
@@ -215,8 +241,19 @@ describe('DELETE /api/orgs/:org_id/members/:user_id', () => {
     expect(res.status).toBe(400);
   });
 
-  it('403 – non-admin cannot remove members', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'member' }] });
+  it('400 – cannot remove another admin', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'admin' }] });
+
+    const res = await request(app)
+      .delete(`/api/orgs/${TEST_ORG_ID}/members/${TEST_USER_2.id}`)
+      .set('Authorization', bearerHeader(adminToken));
+
+    expect(res.status).toBe(400);
+  });
+
+  it('403 – regular members cannot remove teammates', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ role: 'user' }] });
 
     const res = await request(app)
       .delete(`/api/orgs/${TEST_ORG_ID}/members/${TEST_USER_2.id}`)

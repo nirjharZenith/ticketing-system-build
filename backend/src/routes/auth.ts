@@ -52,13 +52,16 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response, nex
     }
 
     const user = await authService.getUserById(req.user.id);
-    res.json({ success: true, user });
+    res.json({
+      success: true,
+      user: { id: user.id, email: user.email, name: user.name },
+    });
   } catch (error) {
     next(error);
   }
 });
 
-// Verify token
+// Verify token and return current user profile
 router.post('/verify', async (req: AuthRequest, res: Response, next: any) => {
   try {
     const { token } = req.body;
@@ -67,8 +70,12 @@ router.post('/verify', async (req: AuthRequest, res: Response, next: any) => {
       throw new ValidationErrorClass('Token is required', { field: 'token' });
     }
 
-    const decoded = authService.verifyToken(token);
-    res.json({ success: true, valid: true, decoded });
+    const user = await authService.getUserFromToken(token);
+    res.json({
+      success: true,
+      valid: true,
+      user: { id: user.id, email: user.email, name: user.name },
+    });
   } catch (error) {
     next(error);
   }

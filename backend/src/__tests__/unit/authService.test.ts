@@ -28,7 +28,7 @@ describe('createUser', () => {
   it('inserts a user and returns id/email/name', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
 
-    const user = await createUser('alice@example.com', 'Alice', 'StrongPass1!');
+    const user = await createUser('Alice@Example.COM', ' Alice ', 'StrongPass1!');
 
     expect(mockQuery).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQuery.mock.calls[0];
@@ -119,7 +119,7 @@ describe('getUserById', () => {
 
   it('throws when user is not found', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    await expect(getUserById('nonexistent-id')).rejects.toThrow('User not found');
+    await expect(getUserById('nonexistent-id')).rejects.toThrow('User not found or inactive');
   });
 });
 

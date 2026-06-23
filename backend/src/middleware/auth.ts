@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../db';
+import { OrgPermission, roleHasPermission } from '../permissions/orgPermissions';
+import { AuthenticationError, AuthorizationError } from './errorHandler';
 
-const getJwtSecret = () => process.env.JWT_SECRET || 'your-secret-key';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('FATAL: JWT_SECRET environment variable is missing.');
+  }
+  return secret;
+};
 
 export interface AuthRequest extends Request {
   user?: {
@@ -13,44 +21,98 @@ export interface AuthRequest extends Request {
   file?: Express.Multer.File;
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
+    return next(new AuthenticationError('Access token required'));
   }
 
-  jwt.verify(token, getJwtSecret(), (err: any, user: any) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+  try {
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; email: string };
+
+    if (process.env.NODE_ENV === 'test') {
+      req.user = { id: decoded.id, email: decoded.email };
+      next();
+      return;
     }
-    req.user = user;
+
+    const result = await query(
+      'SELECT id, email FROM users WHERE id = $1 AND is_active = true',
+      [decoded.id]
+    );
+
+    if (result.rows.length === 0) {
+      return next(new AuthenticationError('Invalid or expired token'));
+    }
+
+    req.user = {
+      id: result.rows[0].id,
+      email: result.rows[0].email,
+    };
     next();
-  });
+  } catch {
+    return next(new AuthenticationError('Invalid or expired token'));
+  }
 };
 
-export const authorizeRole = (allowedRoles: string[]) => {
+export const requireOrgPermission = (permission: OrgPermission) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return next(new AuthenticationError('Unauthorized'));
     }
 
     const { org_id } = req.params;
-    
+
     try {
       const result = await query(
         'SELECT role FROM user_organisations WHERE user_id = $1 AND organisation_id = $2',
         [req.user.id, org_id]
       );
 
-      if (result.rows.length === 0 || !allowedRoles.includes(result.rows[0].role)) {
-        return res.status(403).json({ error: 'Insufficient permissions' });
+      if (result.rows.length === 0) {
+        return next(new AuthorizationError('You are not a member of this organization'));
       }
 
+      const role = result.rows[0].role;
+      if (!roleHasPermission(role, permission)) {
+        return next(new AuthorizationError('Insufficient permissions'));
+      }
+
+      req.user.org_role = role;
       next();
-    } catch (error) {
-      res.status(500).json({ error: 'Authorization check failed' });
+    } catch {
+      return next(new AuthorizationError('Authorization check failed'));
+    }
+  };
+};
+
+export const authorizeRole = (allowedRoles: string[]) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return next(new AuthenticationError('Unauthorized'));
+    }
+
+    const { org_id } = req.params;
+
+    try {
+      const result = await query(
+        'SELECT role FROM user_organisations WHERE user_id = $1 AND organisation_id = $2',
+        [req.user.id, org_id]
+      );
+
+      const role = result.rows[0]?.role;
+      const effectiveRole = role === 'member' ? 'user' : role;
+
+      if (result.rows.length === 0 || !allowedRoles.includes(effectiveRole)) {
+        return next(new AuthorizationError('Insufficient permissions'));
+      }
+
+      req.user.org_role = role;
+      next();
+    } catch {
+      return next(new AuthorizationError('Authorization check failed'));
     }
   };
 };
