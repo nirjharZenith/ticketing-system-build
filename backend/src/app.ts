@@ -7,6 +7,7 @@ import authRoutes from './routes/auth';
 import orgRoutes from './routes/organizations';
 import ticketRoutes from './routes/tickets';
 import uploadRoutes from './routes/uploads';
+import webhookRoutes from './routes/webhooks';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger, getHealthMetrics, requestIdMiddleware } from './middleware/logger';
 import { globalRateLimiter, authRateLimiter } from './middleware/rateLimiter';
@@ -54,6 +55,7 @@ export function createApp(): Express {
   app.use('/api/orgs', orgRoutes);
   app.use('/api/tickets', ticketRoutes);
   app.use('/api/uploads', uploadRoutes);
+  app.use('/api/webhooks', webhookRoutes);
 
   // Health check
   app.get('/api/health', async (_req, res) => {

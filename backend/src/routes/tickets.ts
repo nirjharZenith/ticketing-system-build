@@ -285,40 +285,7 @@ router.get('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMe
   try {
     const { ticket_id } = req.params;
     const localComments = await ticketService.getComments(ticket_id);
-
-    const ticketResult = await query(
-      'SELECT github_issue_number, github_repo_owner, github_repo_name FROM tickets WHERE id = $1',
-      [ticket_id]
-    );
-
-    let allComments = [...localComments];
-
-    if (ticketResult.rows.length > 0) {
-      const ticket = ticketResult.rows[0];
-      if (ticket.github_issue_number && ticket.github_repo_owner && ticket.github_repo_name) {
-        const githubIssueService = require('../services/githubIssueService');
-        const githubComments = await githubIssueService.fetchGithubIssueComments(
-          ticket.github_repo_owner,
-          ticket.github_repo_name,
-          ticket.github_issue_number
-        );
-
-        const formattedGithubComments = githubComments.map((gc: any) => ({
-          id: `github-${gc.id}`,
-          ticket_id,
-          user_id: `github-${gc.user.login}`,
-          comment: gc.body,
-          created_at: gc.created_at,
-          name: `${gc.user.login} (GitHub)`,
-          email: `${gc.user.login}@users.noreply.github.com`
-        }));
-
-        allComments = [...allComments, ...formattedGithubComments];
-        allComments.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      }
-    }
-
-    res.json(allComments);
+    res.json(localComments);
   } catch (error) {
     next(error);
   }
@@ -349,12 +316,14 @@ router.post('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgM
         const userRow = usernameResult.rows[0];
         const username = userRow ? (userRow.name || userRow.email.split('@')[0]) : 'user';
         const commentBody = `**Comment from ${username} (via Zenith):**\n\n${comment}`;
-        await createGithubIssueComment(
+        createGithubIssueComment(
           ticket.github_repo_owner,
           ticket.github_repo_name,
           ticket.github_issue_number,
           commentBody
-        );
+        ).catch((err: any) => {
+          console.error('[github-issue] Failed to sync comment to GitHub:', err);
+        });
       }
     }
 

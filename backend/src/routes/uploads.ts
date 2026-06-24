@@ -72,10 +72,14 @@ router.post(
       }
 
       const username = await getUsername(req.user!.id);
+      const orgNameResult = await query('SELECT name FROM organisations WHERE id = $1', [org_id]);
+      const orgNameRaw = orgNameResult.rows.length > 0 ? orgNameResult.rows[0].name : org_id;
+      const sanitizedOrgName = orgNameRaw.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+
       const uploaded: Array<{ id: string; filename: string; fileUrl: string; size: number }> = [];
 
       for (const file of files) {
-        const stored = await storeTicketImage(file.buffer, username, org_id, ticket_id);
+        const stored = await storeTicketImage(file.buffer, username, sanitizedOrgName, ticket_id);
         const attachment = await ticketService.addAttachment(
           ticket_id,
           stored.filename,
@@ -132,6 +136,21 @@ router.get(
       const fileUrl = attachmentResult.rows[0].file_url;
 
       if (fileUrl.startsWith('http')) {
+        if (fileUrl.includes('github.com') || fileUrl.includes('githubusercontent.com')) {
+          const githubToken = process.env.GITHUB_TOKEN || process.env.GITHUB_PAT;
+          const fetchOptions = githubToken ? { headers: { Authorization: `Bearer ${githubToken}` } } : {};
+          const fetchRes = await fetch(fileUrl, fetchOptions);
+          if (!fetchRes.ok) {
+            return res.status(fetchRes.status).json({ error: 'Failed to fetch file from remote storage' });
+          }
+          const isInline = req.query.inline === 'true';
+          const disposition = isInline ? 'inline' : `attachment; filename="${filename}"`;
+          res.setHeader('Content-Disposition', disposition);
+          res.setHeader('Content-Type', fetchRes.headers.get('content-type') || 'application/octet-stream');
+          const arrayBuffer = await fetchRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          return res.send(buffer);
+        }
         return res.redirect(fileUrl);
       }
 

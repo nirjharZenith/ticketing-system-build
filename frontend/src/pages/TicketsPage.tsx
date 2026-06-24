@@ -225,7 +225,7 @@ const TicketsPage: React.FC = () => {
               </div>
               <p className="ticket-description">{ticket.description || 'No description'}</p>
               <div className="ticket-footer">
-                <Badge variant={`status-${ticket.status}`}>{ticket.status.replace('_', ' ')}</Badge>
+                <Badge variant={`status-${ticket.status.toLowerCase().replace(/\s+/g, '-')}`}>{ticket.status}</Badge>
                 <span className="ticket-date">{new Date(ticket.created_at).toLocaleDateString()}</span>
               </div>
             </Card>

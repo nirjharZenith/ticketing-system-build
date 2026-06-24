@@ -470,10 +470,13 @@ a:hover {
 .priority-urgent { background: #ede9fe; color: #5b21b6; }
 
 .status-open { background: #dbeafe; color: #1e40af; }
-.status-in_progress { background: #fef3c7; color: #92400e; }
-.status-in_verification { background: #fed7aa; color: #9a3412; }
-.status-resolved { background: #d1fae5; color: #065f46; }
+.status-in_progress, .status-in-progress { background: #fef3c7; color: #92400e; }
+.status-in_verification, .status-in-review { background: #f3e8ff; color: #6b21a8; }
+.status-resolved, .status-done { background: #d1fae5; color: #065f46; }
 .status-closed { background: #f3e8ff; color: #6b21a8; }
+.status-to-triage { background: #fee2e2; color: #991b1b; }
+.status-backlog { background: #d1fae5; color: #065f46; }
+.status-ready { background: #dbeafe; color: #1e40af; }
 .github-badge-link { margin-left: 8px; display: inline-flex; align-items: center; }
 .github-badge-link:hover { opacity: 0.85; text-decoration: none; }
 

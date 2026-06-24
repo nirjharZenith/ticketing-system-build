@@ -15,7 +15,7 @@ export const githubStorageEnabled = (): boolean => isGitHubConfigured();
 export const uploadToGitHub = async (
   buffer: Buffer,
   filename: string,
-  orgId: string,
+  orgName: string,
   ticketId: string
 ): Promise<GitHubUploadResult> => {
   if (!isGitHubConfigured()) {
@@ -25,8 +25,8 @@ export const uploadToGitHub = async (
   const owner = process.env.GITHUB_OWNER!;
   const repo = process.env.GITHUB_REPO!;
   const branch = process.env.GITHUB_BRANCH || 'main';
-  const basePath = process.env.GITHUB_UPLOAD_PATH || 'tickets';
-  const filePath = `${basePath}/${orgId}/${ticketId}/${filename}`;
+  const basePath = process.env.GITHUB_UPLOAD_PATH || 'images';
+  const filePath = `${basePath}/${orgName}/images/${filename}`;
 
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
@@ -52,6 +52,6 @@ export const uploadToGitHub = async (
     throw new Error(`GitHub upload failed: ${response.status} ${errorBody}`);
   }
 
-  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
+  const url = `https://github.com/${owner}/${repo}/raw/${branch}/${filePath}`;
   return { url, path: filePath };
 };

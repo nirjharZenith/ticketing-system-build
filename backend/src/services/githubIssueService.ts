@@ -44,6 +44,7 @@ export interface GitHubIssueResult {
   url: string;
   owner: string;
   repo: string;
+  node_id: string;
 }
 
 export const createGithubIssue = async (
@@ -57,7 +58,7 @@ export const createGithubIssue = async (
   }
 
   const { token, owner, repo } = getGitHubConfig();
-  
+
   try {
     const response = await fetchWithResilience(
       `https://api.github.com/repos/${owner}/${repo}/issues`,
@@ -89,6 +90,7 @@ export const createGithubIssue = async (
       url: data.html_url,
       owner: owner!,
       repo: repo!,
+      node_id: data.node_id,
     };
   } catch (error) {
     console.error('[github-issue] Error creating GitHub issue:', error);
@@ -336,39 +338,4 @@ export const appendAttachmentToGithubIssue = async (
   }
 };
 
-export const fetchGithubIssueComments = async (
-  owner: string,
-  repo: string,
-  issueNumber: number
-): Promise<any[]> => {
-  if (!isGitHubConfigured()) {
-    return [];
-  }
 
-  const { token } = getGitHubConfig();
-
-  try {
-    const response = await fetchWithResilience(
-      `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2026-03-10',
-          'User-Agent': 'Zenith-Ticketing-Backend',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.error(`[github-issue] Failed to fetch comments: ${response.status}`);
-      return [];
-    }
-
-    return (await response.json()) as any;
-  } catch (error) {
-    console.error('[github-issue] Error fetching GitHub issue comments:', error);
-    return [];
-  }
-};

@@ -24,14 +24,14 @@ const saveLocally = (buffer: Buffer, filename: string): string => {
 export const storeTicketImage = async (
   fileBuffer: Buffer,
   username: string,
-  orgId: string,
+  orgName: string,
   ticketId: string
 ): Promise<StoredImage> => {
   const sanitized = await sanitizeImage(fileBuffer);
   const filename = buildImageFilename(username, sanitized.extension);
 
   if (githubStorageEnabled()) {
-    const { url } = await uploadToGitHub(sanitized.buffer, filename, orgId, ticketId);
+    const { url } = await uploadToGitHub(sanitized.buffer, filename, orgName, ticketId);
     return { filename, url, size: sanitized.buffer.length };
   }
 

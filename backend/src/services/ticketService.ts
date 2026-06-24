@@ -22,29 +22,21 @@ export const createTicket = async (
     const githubIssueUrl = githubIssue?.url || null;
     const githubRepoOwner = githubIssue?.owner || null;
     const githubRepoName = githubIssue?.repo || null;
+    const githubIssueNodeId = githubIssue?.node_id || null;
 
-    await query(
+    const insertResult = await query(
       `INSERT INTO tickets (id, organisation_id, creator_id, title, description, priority,
-                            github_issue_number, github_issue_url, github_repo_owner, github_repo_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                            github_issue_number, github_issue_url, github_repo_owner, github_repo_name, github_issue_node_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
       [ticketId, orgId, creatorId, title, description, priority,
-       githubIssueNumber, githubIssueUrl, githubRepoOwner, githubRepoName]
+        githubIssueNumber, githubIssueUrl, githubRepoOwner, githubRepoName, githubIssueNodeId]
     );
 
     // Log activity
     await logTicketActivity(ticketId, creatorId, 'created', null, `Ticket created`);
 
-    return {
-      id: ticketId,
-      title,
-      description,
-      priority,
-      status: 'open',
-      github_issue_number: githubIssueNumber,
-      github_issue_url: githubIssueUrl,
-      github_repo_owner: githubRepoOwner,
-      github_repo_name: githubRepoName,
-    };
+    return insertResult.rows[0];
   } catch (error) {
     throw error;
   }
@@ -65,45 +57,7 @@ export const getTicketById = async (ticketId: string, orgId?: string) => {
     throw new NotFoundError('Ticket');
   }
 
-  const ticket = result.rows[0];
-
-  // Sync with GitHub status if linked
-  if (ticket.github_issue_number && ticket.github_repo_owner && ticket.github_repo_name) {
-    try {
-      const githubState = await githubIssueService.fetchGithubIssueState(
-        ticket.github_repo_owner,
-        ticket.github_repo_name,
-        ticket.github_issue_number
-      );
-
-      if (githubState) {
-        ticket.github_status = githubState;
-        
-        // If GitHub issue is closed, update local ticket status to closed in DB
-        if (githubState === 'closed' && ticket.status !== 'closed') {
-          await query(
-            "UPDATE tickets SET status = 'closed', resolved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-            [ticketId]
-          );
-          ticket.status = 'closed';
-          ticket.resolved_at = new Date();
-          
-          // Log activity for system sync
-          await logTicketActivity(
-            ticketId,
-            ticket.creator_id, // Default to creator/system action log
-            'updated',
-            'open',
-            JSON.stringify({ status: 'closed', note: 'Synced state from closed GitHub issue' })
-          );
-        }
-      }
-    } catch (err) {
-      console.error('[github-sync] Error fetching GitHub issue status:', err);
-    }
-  }
-
-  return ticket;
+  return result.rows[0];
 };
 
 export const getOrgTickets = async (orgId: string, filters?: any) => {
@@ -203,7 +157,7 @@ export const deleteTicket = async (ticketId: string, orgId: string) => {
 
 export const logTicketActivity = async (
   ticketId: string,
-  userId: string,
+  userId: string | null,
   action: string,
   oldValue: string | null,
   newValue: string
@@ -217,8 +171,8 @@ export const logTicketActivity = async (
 
 export const getTicketActivity = async (ticketId: string) => {
   const result = await query(
-    `SELECT ta.*, u.name, u.email FROM ticket_activity ta
-     JOIN users u ON ta.user_id = u.id
+    `SELECT ta.*, COALESCE(u.name, 'System') AS name, COALESCE(u.email, '') AS email FROM ticket_activity ta
+     LEFT JOIN users u ON ta.user_id = u.id
      WHERE ta.ticket_id = $1
      ORDER BY ta.created_at DESC`,
     [ticketId]

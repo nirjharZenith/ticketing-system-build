@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   title VARCHAR(255) NOT NULL,
   description TEXT,
   priority VARCHAR(50) DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  status VARCHAR(50) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'in_verification', 'resolved', 'closed')),
+  status VARCHAR(50) DEFAULT 'To triage',
   assigned_to UUID REFERENCES users(id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS ticket_attachments (
 CREATE TABLE IF NOT EXISTS ticket_activity (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id),
+  user_id UUID REFERENCES users(id),
   action VARCHAR(100) NOT NULL,
   old_value TEXT,
   new_value TEXT,

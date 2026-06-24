@@ -60,8 +60,6 @@ const TicketDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [editingStatus, setEditingStatus] = useState(false);
-  const [newStatus, setNewStatus] = useState('');
   const [uploadImages, setUploadImages] = useState<ImagePreview[]>([]);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -87,7 +85,6 @@ const TicketDetailPage: React.FC = () => {
         ticketAPI.getComments(org_id, ticket_id),
       ]);
       setTicket(ticketResponse.data);
-      setNewStatus(ticketResponse.data.status);
       setNewDescription(ticketResponse.data.description || '');
       setActivity(activityResponse.data);
       setAttachments(attachmentsResponse.data);
@@ -115,13 +112,13 @@ const TicketDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!socket || !ticket_id) return;
-    
+
     const handleUpdate = (updatedTicket: any) => {
       if (updatedTicket.id === ticket_id) {
         loadTicketDetails();
       }
     };
-    
+
     const handleComment = (data: any) => {
       if (data.ticket_id === ticket_id) {
         loadTicketDetails();
@@ -130,27 +127,12 @@ const TicketDetailPage: React.FC = () => {
 
     socket.on('ticket:updated', handleUpdate);
     socket.on('ticket:commented', handleComment);
-    
+
     return () => {
       socket.off('ticket:updated', handleUpdate);
       socket.off('ticket:commented', handleComment);
     };
   }, [socket, ticket_id, loadTicketDetails]);
-
-  const handleStatusUpdate = async () => {
-    if (!ticket || newStatus === ticket.status) {
-      setEditingStatus(false);
-      return;
-    }
-
-    try {
-      await ticketAPI.update(org_id!, ticket_id!, { status: newStatus });
-      setEditingStatus(false);
-      await loadTicketDetails();
-    } catch (err: any) {
-      setError(getApiErrorMessage(err, 'Failed to update ticket'));
-    }
-  };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,45 +235,23 @@ const TicketDetailPage: React.FC = () => {
 
             <div className="info-group">
               <span className="info-label">Status</span>
-              {editingStatus ? (
-                <div className="info-value status-edit">
-                  <select
-                    id="status-select"
-                    className="form-select status-select"
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
+              <div className="info-value status-display">
+                <Badge variant={`status-${ticket.status.toLowerCase().replace(/\s+/g, '-')}`}>{ticket.status}</Badge>
+                {ticket.github_issue_number && (
+                  <a
+                    href={ticket.github_issue_url || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="github-badge-link"
+                    title="View GitHub Issue"
+                    style={{ textDecoration: 'none' }}
                   >
-                    <option value="open">Open</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="in_verification">In Verification</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                  <Button type="button" size="sm" onClick={handleStatusUpdate}>Save</Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setEditingStatus(false)}>Cancel</Button>
-                </div>
-              ) : (
-                <div className="info-value status-display">
-                  <Badge variant={`status-${ticket.status}`}>{formatMetaLabel(ticket.status)}</Badge>
-                  {ticket.status !== 'closed' && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setEditingStatus(true)}>Edit</Button>
-                  )}
-                  {ticket.github_issue_number && (
-                    <a
-                      href={ticket.github_issue_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="github-badge-link"
-                      title="View GitHub Issue"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      <Badge variant={ticket.github_status === 'closed' ? 'priority-low' : 'status-in_verification'}>
-                        GitHub #{ticket.github_issue_number} ({ticket.github_status || 'open'})
-                      </Badge>
-                    </a>
-                  )}
-                </div>
-              )}
+                    <Badge variant={ticket.github_status === 'closed' ? 'priority-low' : 'status-in_verification'}>
+                      GitHub #{ticket.github_issue_number} ({ticket.github_status || 'open'})
+                    </Badge>
+                  </a>
+                )}
+              </div>
             </div>
 
             <div className="info-group">
@@ -336,15 +296,14 @@ const TicketDetailPage: React.FC = () => {
             {attachments.length > 0 ? (
               <div className="attachments-gallery">
                 {attachments.map((attachment) => (
-                  <div key={attachment.id} className="attachment-card">
+                  <div key={attachment.id} className="attachment-card" style={{ display: 'flex', flexDirection: 'column', padding: '12px', alignItems: 'center', justifyContent: 'center', background: 'var(--color-surface-muted)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
                     <img
-                      src={getImageUrl(attachment)}
+                      src={`${getImageUrl(attachment)}?inline=true`}
                       alt={attachment.filename}
-                      onClick={() => setLightboxUrl(getImageUrl(attachment))}
+                      style={{ maxWidth: '100%', maxHeight: '150px', objectFit: 'contain', marginBottom: '8px', borderRadius: '4px', border: '1px solid var(--color-border)', cursor: 'pointer' }}
+                      onClick={() => setLightboxUrl(`${getImageUrl(attachment)}?inline=true`)}
                     />
-                    <div className="attachment-meta">
-                      <span>{attachment.filename}</span>
-                    </div>
+                    <span style={{ fontSize: '12px', wordBreak: 'break-all', textAlign: 'center', marginBottom: '8px', color: 'var(--color-text)' }}>{attachment.filename}</span>
                   </div>
                 ))}
               </div>
@@ -372,39 +331,27 @@ const TicketDetailPage: React.FC = () => {
           {/* Comments Section */}
           <div className="comments-section" style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--color-border)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Comments ({comments.length})</h3>
-            
+
             <div className="comments-list" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
               {comments.length === 0 ? (
                 <p className="no-comments" style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>No comments yet. Be the first to comment!</p>
               ) : (
-                comments.map((c) => {
-                  const isGithub = c.id.startsWith('github-');
-                  return (
+                comments.map((c) => (
                     <div
                       key={c.id}
-                      className={`comment-card ${isGithub ? 'github-comment' : ''}`}
+                      className="comment-card"
                       style={{
                         padding: 16,
-                        background: isGithub ? '#f6f8fa' : 'var(--color-surface-muted)',
+                        background: 'var(--color-surface-muted)',
                         borderRadius: 'var(--radius-md)',
-                        border: isGithub ? '1px solid #d0d7de' : '1px solid var(--color-border)',
+                        border: '1px solid var(--color-border)',
                         position: 'relative'
                       }}
                     >
                       <div className="comment-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                         <div className="comment-author" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {isGithub && (
-                            <svg className="github-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" style={{ fill: '#24292f' }}>
-                              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-                            </svg>
-                          )}
                           <span className="comment-author-name" style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</span>
-                          {isGithub && (
-                            <span style={{ fontSize: 10, background: '#ddf4ff', color: '#0969da', padding: '2px 6px', borderRadius: 999, fontWeight: 600 }}>GitHub</span>
-                          )}
-                          {!isGithub && (
-                            <span className="comment-author-email" style={{ color: 'var(--color-text-light)', fontSize: 11 }}>{c.email}</span>
-                          )}
+                          <span className="comment-author-email" style={{ color: 'var(--color-text-light)', fontSize: 11 }}>{c.email}</span>
                         </div>
                         <span className="comment-time" style={{ color: 'var(--color-text-light)', fontSize: 11 }}>{new Date(c.created_at).toLocaleString()}</span>
                       </div>
@@ -412,8 +359,8 @@ const TicketDetailPage: React.FC = () => {
                         {c.comment}
                       </div>
                     </div>
-                  );
-                })
+                  ))
+
               )}
             </div>
 
