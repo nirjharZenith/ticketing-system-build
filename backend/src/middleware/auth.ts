@@ -102,10 +102,14 @@ export const authorizeRole = (allowedRoles: string[]) => {
         [req.user.id, org_id]
       );
 
-      const role = result.rows[0]?.role;
+      if (result.rows.length === 0) {
+        return next(new AuthorizationError('Insufficient permissions'));
+      }
+
+      const role = result.rows[0].role;
       const effectiveRole = role === 'member' ? 'user' : role;
 
-      if (result.rows.length === 0 || !allowedRoles.includes(effectiveRole)) {
+      if (!allowedRoles.includes(effectiveRole)) {
         return next(new AuthorizationError('Insufficient permissions'));
       }
 

@@ -17,6 +17,8 @@ interface Ticket {
   assigned_to?: string;
 }
 
+const GITHUB_STATUSES = ['To triage', 'Backlog', 'Ready', 'In progress', 'In review', 'Done'];
+
 const TicketsPage: React.FC = () => {
   const { org_id } = useParams<{ org_id: string }>();
   const navigate = useNavigate();
@@ -32,8 +34,17 @@ const TicketsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const [syncError, setSyncError] = useState('');
 
   const { socket, joinOrg, leaveOrg } = useSocket();
+
+  // Set browser tab title
+  useEffect(() => {
+    document.title = 'Tickets — Zenith';
+    return () => { document.title = 'Zenith Tickets'; };
+  }, []);
 
   const loadTickets = useCallback(async () => {
     if (!org_id) return;
@@ -46,7 +57,6 @@ const TicketsPage: React.FC = () => {
       setTickets(response.data);
       setError('');
     } catch (err) {
-      console.error('Failed to load tickets:', err);
       setError('Failed to load tickets');
     } finally {
       setLoading(false);
@@ -55,8 +65,7 @@ const TicketsPage: React.FC = () => {
 
   useEffect(() => {
     loadTickets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [org_id, statusFilter, priorityFilter]);
+  }, [loadTickets]);
 
   useEffect(() => {
     if (org_id) {
@@ -67,7 +76,7 @@ const TicketsPage: React.FC = () => {
 
   useEffect(() => {
     if (!socket) return;
-    
+
     const handleEvent = () => {
       loadTickets();
     };
@@ -81,7 +90,7 @@ const TicketsPage: React.FC = () => {
       socket.off('ticket:updated', handleEvent);
       socket.off('ticket:deleted', handleEvent);
     };
-  }, [socket, org_id, loadTickets]); // re-run if socket changes
+  }, [socket, loadTickets]);
 
   const clearImages = () => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
@@ -120,6 +129,22 @@ const TicketsPage: React.FC = () => {
     }
   };
 
+  const handleSyncGithub = async () => {
+    setSyncing(true);
+    setSyncMessage('');
+    setSyncError('');
+    try {
+      const res = await ticketAPI.syncGithub(org_id!);
+      setSyncMessage(res.data.message || 'Synced!');
+      await loadTickets();
+    } catch (err: any) {
+      setSyncError(getApiErrorMessage(err, 'Sync failed'));
+    } finally {
+      setSyncing(false);
+      setTimeout(() => { setSyncMessage(''); setSyncError(''); }, 5000);
+    }
+  };
+
   const filteredTickets = tickets.filter((ticket) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -131,7 +156,8 @@ const TicketsPage: React.FC = () => {
 
   const stats = {
     total: tickets.length,
-    open: tickets.filter((t) => t.status === 'open').length,
+    active: tickets.filter((t) => t.status !== 'Done' && t.status !== 'closed' && t.status !== 'resolved').length,
+    done: tickets.filter((t) => t.status === 'Done' || t.status === 'resolved' || t.status === 'closed').length,
     urgent: tickets.filter((t) => t.priority === 'urgent').length,
   };
 
@@ -154,6 +180,15 @@ const TicketsPage: React.FC = () => {
           <Button variant="secondary" onClick={() => navigate(`/org/${org_id}/members`)}>
             Team
           </Button>
+          <Button
+            variant="secondary"
+            onClick={handleSyncGithub}
+            disabled={syncing}
+            title="Sync ticket statuses from GitHub Project"
+          >
+            <span className={syncing ? 'sync-spinning' : ''} style={{ display: 'inline-block' }}>↻</span>
+            {syncing ? 'Syncing...' : 'Sync GitHub'}
+          </Button>
           <Button onClick={() => { setShowCreateForm(!showCreateForm); setError(''); }}>
             {showCreateForm ? 'Cancel' : '+ New Ticket'}
           </Button>
@@ -161,17 +196,33 @@ const TicketsPage: React.FC = () => {
       }
     >
       <div className="stats-row">
-        <Card className="stat-card"><span className="stat-value">{stats.total}</span><span className="stat-label">Total</span></Card>
-        <Card className="stat-card"><span className="stat-value">{stats.open}</span><span className="stat-label">Open</span></Card>
-        <Card className="stat-card"><span className="stat-value">{stats.urgent}</span><span className="stat-label">Urgent</span></Card>
+        <Card className="stat-card">
+          <span className="stat-value">{stats.total}</span>
+          <span className="stat-label">Total</span>
+        </Card>
+        <Card className="stat-card">
+          <span className="stat-value stat-value-active">{stats.active}</span>
+          <span className="stat-label">Active</span>
+        </Card>
+        <Card className="stat-card">
+          <span className="stat-value stat-value-done">{stats.done}</span>
+          <span className="stat-label">Done</span>
+        </Card>
+        <Card className="stat-card">
+          <span className="stat-value stat-value-urgent">{stats.urgent}</span>
+          <span className="stat-label">Urgent</span>
+        </Card>
       </div>
+
+      {syncMessage && <Alert variant="success">{syncMessage}</Alert>}
+      {syncError && <Alert>{syncError}</Alert>}
 
       {showCreateForm && (
         <Card className="create-ticket-form">
           <h2 className="section-title">New Ticket</h2>
           <form onSubmit={handleCreateTicket}>
             <Input id="title" label="Title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Brief summary of the issue" disabled={creating} />
-            <Textarea id="description" label="Description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Provide details..." disabled={creating} rows={4} />
+            <Textarea id="description" label="Description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Provide details about the issue..." disabled={creating} rows={4} />
             <Select id="priority" label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} disabled={creating} options={[
               { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' },
               { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' },
@@ -187,19 +238,26 @@ const TicketsPage: React.FC = () => {
         <input
           type="search"
           className="form-input search-input"
-          placeholder="Search tickets..."
+          placeholder="🔍  Search tickets by title or description..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search tickets"
         />
-        <select aria-label="Filter tickets by status" className="form-select filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <select
+          aria-label="Filter by status"
+          className="form-select filter-select"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
           <option value="">All Status</option>
-          <option value="open">Open</option>
-          <option value="in_progress">In Progress</option>
-          <option value="in_verification">In Verification</option>
-          <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
+          {GITHUB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select aria-label="Filter tickets by priority" className="form-select filter-select" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+        <select
+          aria-label="Filter by priority"
+          className="form-select filter-select"
+          value={priorityFilter}
+          onChange={(e) => setPriorityFilter(e.target.value)}
+        >
           <option value="">All Priority</option>
           <option value="low">Low</option>
           <option value="medium">Medium</option>
@@ -212,24 +270,40 @@ const TicketsPage: React.FC = () => {
 
       <div className="tickets-list">
         {filteredTickets.length === 0 ? (
-          <div className="empty-state card">
-            <div className="empty-state-icon">🎫</div>
-            <p>{searchQuery ? 'No tickets match your search' : 'No tickets yet. Create your first one!'}</p>
+          <div className="empty-state card" style={{ gridColumn: '1 / -1' }}>
+            <span className="empty-state-icon">🎫</span>
+            <p style={{ fontWeight: 600, fontSize: 16, color: 'var(--color-text)', marginBottom: 8 }}>
+              {searchQuery ? 'No tickets match your search' : statusFilter ? `No tickets with status "${statusFilter}"` : 'No tickets yet'}
+            </p>
+            <p style={{ fontSize: 14 }}>
+              {!searchQuery && !statusFilter ? 'Create your first ticket to get started.' : 'Try adjusting your filters.'}
+            </p>
           </div>
         ) : (
-          filteredTickets.map((ticket) => (
-            <Card key={ticket.id} className="ticket-card" hoverable onClick={() => navigate(`/org/${org_id}/tickets/${ticket.id}`)}>
-              <div className="ticket-header">
-                <h3>{ticket.title}</h3>
-                <Badge variant={`priority-${ticket.priority}`}>{ticket.priority}</Badge>
-              </div>
-              <p className="ticket-description">{ticket.description || 'No description'}</p>
-              <div className="ticket-footer">
-                <Badge variant={`status-${ticket.status.toLowerCase().replace(/\s+/g, '-')}`}>{ticket.status}</Badge>
-                <span className="ticket-date">{new Date(ticket.created_at).toLocaleDateString()}</span>
-              </div>
-            </Card>
-          ))
+          filteredTickets.map((ticket) => {
+            const isDone = ticket.status === 'Done' || ticket.status === 'closed' || ticket.status === 'resolved';
+            const statusClass = `status-${ticket.status.toLowerCase().replace(/\s+/g, '-')}`;
+            return (
+              <Card
+                key={ticket.id}
+                className={`ticket-card ${isDone ? 'ticket-card-done' : ''}`}
+                hoverable
+                onClick={() => navigate(`/org/${org_id}/tickets/${ticket.id}`)}
+              >
+                <div className="ticket-header">
+                  <h3>{ticket.title}</h3>
+                  <div className="ticket-badges">
+                    <Badge variant={`priority-${ticket.priority}`}>{ticket.priority}</Badge>
+                  </div>
+                </div>
+                <p className="ticket-description">{ticket.description || 'No description'}</p>
+                <div className="ticket-footer">
+                  <Badge variant={statusClass}>{ticket.status}</Badge>
+                  <span className="ticket-date">{new Date(ticket.created_at).toLocaleDateString()}</span>
+                </div>
+              </Card>
+            );
+          })
         )}
       </div>
     </AppLayout>

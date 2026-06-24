@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ValidationException } from '../utils/validation';
+import { logger } from './logger';
+
 
 export interface AppError extends Error {
   status?: number;
@@ -66,12 +68,11 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  console.error('[v0] Error:', {
+  logger.error('Unhandled error', {
     name: err.name,
     message: err.message,
     path: req.path,
     method: req.method,
-    timestamp: new Date().toISOString(),
   });
 
   // Handle validation exceptions

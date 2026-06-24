@@ -15,11 +15,12 @@ export interface StoredImage {
   size: number;
 }
 
-const saveLocally = (buffer: Buffer, filename: string): string => {
+const saveLocally = async (buffer: Buffer, filename: string): Promise<string> => {
   const filepath = path.join(uploadsDir, filename);
-  fs.writeFileSync(filepath, buffer);
+  await fs.promises.writeFile(filepath, buffer);
   return `/uploads/${filename}`;
 };
+
 
 export const storeTicketImage = async (
   fileBuffer: Buffer,
@@ -35,7 +36,8 @@ export const storeTicketImage = async (
     return { filename, url, size: sanitized.buffer.length };
   }
 
-  const url = saveLocally(sanitized.buffer, filename);
+  const url = await saveLocally(sanitized.buffer, filename);
+
   return { filename, url, size: sanitized.buffer.length };
 };
 

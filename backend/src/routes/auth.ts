@@ -1,17 +1,18 @@
-import { Router, Response, Router as ExpressRouter } from 'express';
+import express, { Router, Response } from 'express';
+
 import { AuthRequest, authenticateToken } from '../middleware/auth';
 import * as authService from '../services/authService';
 import { validateUserRegistration, ValidationException } from '../utils/validation';
-import { AuthenticationError, ValidationError as ValidationErrorClass } from '../middleware/errorHandler';
+import { AuthenticationError, ValidationError as ValidationErrorClass, asyncHandler } from '../middleware/errorHandler';
 
-const router: ExpressRouter = Router();
+const router: express.Router = express.Router();
 
 // Register
-router.post('/register', async (req: AuthRequest, res: Response, next: any) => {
-  try {
+router.post(
+  '/register',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { email, name, password, confirmPassword } = req.body;
 
-    // Validate input
     const validationErrors = validateUserRegistration({ email, name, password, confirmPassword });
     if (validationErrors.length > 0) {
       throw new ValidationException(validationErrors);
@@ -19,14 +20,13 @@ router.post('/register', async (req: AuthRequest, res: Response, next: any) => {
 
     const user = await authService.createUser(email, name, password);
     res.status(201).json({ success: true, user });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
 // Login
-router.post('/login', async (req: AuthRequest, res: Response, next: any) => {
-  try {
+router.post(
+  '/login',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { email, password } = req.body;
 
     if (!email || typeof email !== 'string' || email.trim().length === 0) {
@@ -39,14 +39,14 @@ router.post('/login', async (req: AuthRequest, res: Response, next: any) => {
 
     const { user, token } = await authService.authenticateUser(email.toLowerCase().trim(), password);
     res.json({ success: true, user, token });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
 // Get current user
-router.get('/me', authenticateToken, async (req: AuthRequest, res: Response, next: any) => {
-  try {
+router.get(
+  '/me',
+  authenticateToken,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     if (!req.user) {
       throw new AuthenticationError('Unauthorized');
     }
@@ -56,14 +56,13 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response, nex
       success: true,
       user: { id: user.id, email: user.email, name: user.name },
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
-// Verify token and return current user profile
-router.post('/verify', async (req: AuthRequest, res: Response, next: any) => {
-  try {
+// Verify token
+router.post(
+  '/verify',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { token } = req.body;
 
     if (!token || typeof token !== 'string') {
@@ -76,9 +75,7 @@ router.post('/verify', async (req: AuthRequest, res: Response, next: any) => {
       valid: true,
       user: { id: user.id, email: user.email, name: user.name },
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
 export default router;

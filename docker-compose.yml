@@ -1,60 +1,84 @@
 version: '3.8'
 
+# ── Development compose ───────────────────────────────────────────────────────
+# For production, set NODE_ENV=production and use strong secrets via env file:
+#   docker compose --env-file .env.prod up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: ticketing_db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ticketing_user
-      POSTGRES_PASSWORD: ticketing_password
-      POSTGRES_DB: ticketing_app
+      POSTGRES_USER: ${POSTGRES_USER:-ticketing_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ticketing_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketing_app}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ticketing_user"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ticketing_user}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: ${DOCKER_TARGET:-builder}   # 'builder' for dev (ts-node), 'runner' for prod
     container_name: ticketing_backend
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://ticketing_user:ticketing_password@postgres:5432/ticketing_app
-      JWT_SECRET: your-secret-key-change-in-production
-      BACKEND_PORT: 5000
-      NODE_ENV: development
-      FRONTEND_URL: http://localhost:3000
-      # GitHub image storage (optional — uses local disk when unset)
-      # GITHUB_TOKEN: ghp_xxx
-      # GITHUB_OWNER: your-github-username
-      # GITHUB_REPO: ticket-attachments
-      # GITHUB_BRANCH: main
-      # GITHUB_UPLOAD_PATH: tickets
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ticketing_user}:${POSTGRES_PASSWORD:-ticketing_password}@postgres:5432/${POSTGRES_DB:-ticketing_app}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      BACKEND_PORT: ${BACKEND_PORT:-5000}
+      NODE_ENV: ${NODE_ENV:-development}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # GitHub integration (optional)
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_ISSUE_OWNER: ${GITHUB_ISSUE_OWNER:-}
+      GITHUB_ISSUE_REPO: ${GITHUB_ISSUE_REPO:-}
+      GITHUB_PROJECT_NUMBER: ${GITHUB_PROJECT_NUMBER:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      # Email (optional)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # DB pool tuning
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
     ports:
-      - "5000:5000"
+      - "${BACKEND_PORT:-5000}:5000"
     volumes:
-      - ./backend/src:/app/src
+      - ./backend/src:/app/src         # live reload in dev
       - backend_uploads:/app/uploads
-    command: pnpm dev
+    command: ${BACKEND_CMD:-pnpm dev}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000/api}
     container_name: ticketing_frontend
+    restart: unless-stopped
     depends_on:
-      - backend
-    environment:
-      REACT_APP_API_URL: http://localhost:5000/api
+      backend:
+        condition: service_healthy
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend/src:/app/src
-    command: pnpm start
+      - "${FRONTEND_PORT:-3000}:80"
 
 volumes:
   postgres_data:

@@ -99,6 +99,8 @@ export const ticketAPI = {
     const base = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000';
     return `${base}/api/uploads/${orgId}/tickets/${ticketId}/files/${encodeURIComponent(filename)}`;
   },
+  syncGithub: (orgId: string) =>
+    api.post(`/tickets/${orgId}/sync-github`),
 };
 
 export default api;

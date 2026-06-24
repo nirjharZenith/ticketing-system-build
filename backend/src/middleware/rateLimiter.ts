@@ -1,78 +1,80 @@
 import { Request, Response, NextFunction } from 'express';
 import { RateLimitError } from './errorHandler';
 
-interface RateLimitStore {
-  [key: string]: { count: number; resetTime: number };
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
 }
 
-const store: RateLimitStore = {};
+// Shared in-process store — acceptable for single-node; swap for Redis adapter in multi-node
+const store = new Map<string, RateLimitEntry>();
 
 export interface RateLimitConfig {
-  windowMs: number; // Time window in ms
-  maxRequests: number; // Max requests per window
-  keyGenerator?: (req: Request) => string; // Function to generate rate limit key
-  handler?: (req: Request, res: Response, next: NextFunction) => void; // Custom handler
+  windowMs: number;
+  maxRequests: number;
+  keyGenerator?: (req: Request) => string;
 }
 
-const defaultKeyGenerator = (req: Request): string => {
-  return req.ip || req.socket.remoteAddress || 'unknown';
-};
+const defaultKeyGenerator = (req: Request): string =>
+  req.ip || req.socket.remoteAddress || 'unknown';
 
 export const createRateLimiter = (config: RateLimitConfig) => {
-  const { windowMs, maxRequests, keyGenerator = defaultKeyGenerator, handler } = config;
+  const { windowMs, maxRequests, keyGenerator = defaultKeyGenerator } = config;
 
   return (req: Request, res: Response, next: NextFunction) => {
     const key = keyGenerator(req);
     const now = Date.now();
 
-    // Initialize or get rate limit entry
-    if (!store[key] || store[key].resetTime < now) {
-      store[key] = { count: 0, resetTime: now + windowMs };
+    let entry = store.get(key);
+    if (!entry || entry.resetTime < now) {
+      entry = { count: 0, resetTime: now + windowMs };
+      store.set(key, entry);
     }
 
-    store[key].count++;
+    entry.count++;
 
-    // Add rate limit headers
-    const remaining = Math.max(0, maxRequests - store[key].count);
-    const resetTime = Math.ceil((store[key].resetTime - now) / 1000);
+    const remaining = Math.max(0, maxRequests - entry.count);
+    const resetInSec = Math.ceil((entry.resetTime - now) / 1000);
 
     res.setHeader('X-RateLimit-Limit', maxRequests);
     res.setHeader('X-RateLimit-Remaining', remaining);
-    res.setHeader('X-RateLimit-Reset', resetTime);
+    res.setHeader('X-RateLimit-Reset', resetInSec);
 
-    if (store[key].count > maxRequests) {
-      if (handler) {
-        return handler(req, res, next);
-      }
-      return next(new RateLimitError(`Rate limit exceeded. Try again in ${resetTime} seconds`));
+    if (entry.count > maxRequests) {
+      res.setHeader('Retry-After', resetInSec);
+      return next(new RateLimitError(`Rate limit exceeded. Retry in ${resetInSec}s`));
     }
 
     next();
   };
 };
 
-// Predefined rate limiters
-export const globalRateLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  maxRequests: 100,
-});
+// ── Pre-built limiters ──────────────────────────────────────────────────────
 
+/** Strict limiter for auth endpoints — always active regardless of NODE_ENV */
 export const authRateLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  maxRequests: 5, // Stricter limit for auth
+  windowMs: 15 * 60 * 1000, // 15 min
+  maxRequests: 10,           // 10 attempts per window (increased from 5 to allow dev testing)
 });
 
-export const apiRateLimiter = createRateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 30,
+/** General API limiter — 200 req / 15 min */
+export const globalRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 200,
 });
 
-// Cleanup old entries periodically
+/** Upload-specific limiter — 20 req / min */
+export const uploadRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+});
+
+// ── Periodic cleanup of expired entries (every 10 min) ─────────────────────
 setInterval(() => {
   const now = Date.now();
-  for (const key in store) {
-    if (store[key].resetTime < now) {
-      delete store[key];
+  for (const [key, entry] of store.entries()) {
+    if (entry.resetTime < now) {
+      store.delete(key);
     }
   }
-}, 10 * 60 * 1000); // Cleanup every 10 minutes
+}, 10 * 60 * 1000).unref(); // unref so this timer doesn't keep the process alive

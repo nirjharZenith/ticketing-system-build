@@ -66,7 +66,7 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Shared UI primitives */
+/* ---- Shared UI primitives ---- */
 .page-shell {
   min-height: 100vh;
   display: flex;
@@ -74,7 +74,7 @@ a:hover {
 }
 
 .app-header {
-  background: var(--color-surface);
+  background: rgba(255,255,255,0.85);
   border-bottom: 1px solid var(--color-border);
   padding: 0 24px;
   height: 64px;
@@ -84,7 +84,9 @@ a:hover {
   position: sticky;
   top: 0;
   z-index: 100;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 1px 0 rgba(99,102,241,0.07);
 }
 
 .app-brand {
@@ -95,10 +97,12 @@ a:hover {
   font-size: 18px;
   color: var(--color-text);
   text-decoration: none;
+  transition: opacity var(--transition);
 }
 
 .app-brand:hover {
   text-decoration: none;
+  opacity: 0.85;
 }
 
 .brand-icon {
@@ -111,6 +115,8 @@ a:hover {
   justify-content: center;
   color: white;
   font-size: 18px;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+  flex-shrink: 0;
 }
 
 .header-nav {
@@ -168,6 +174,11 @@ a:hover {
   background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
+  transition: border-color var(--transition);
+}
+
+.user-badge:hover {
+  border-color: var(--color-border-strong);
 }
 
 .user-info {
@@ -204,6 +215,7 @@ a:hover {
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .page-content {
@@ -216,7 +228,7 @@ a:hover {
 
 .page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 28px;
@@ -227,6 +239,7 @@ a:hover {
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .page-subtitle {
@@ -235,6 +248,7 @@ a:hover {
   margin-top: 4px;
 }
 
+/* ---- Buttons ---- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -247,22 +261,29 @@ a:hover {
   border: none;
   transition: all var(--transition);
   white-space: nowrap;
+  cursor: pointer;
+  line-height: 1;
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 .btn-primary {
-  background: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
   color: white;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.25);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: linear-gradient(135deg, var(--color-primary-hover), #7c3aed);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 16px rgba(99,102,241,0.35);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .btn-secondary {
@@ -274,6 +295,7 @@ a:hover {
 .btn-secondary:hover:not(:disabled) {
   background: var(--color-surface-muted);
   border-color: var(--color-border-strong);
+  transform: translateY(-1px);
 }
 
 .btn-danger {
@@ -283,6 +305,7 @@ a:hover {
 
 .btn-danger:hover:not(:disabled) {
   background: var(--color-danger-hover);
+  transform: translateY(-1px);
 }
 
 .btn-ghost {
@@ -318,60 +341,33 @@ a:hover {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
-.card-hoverable {
-  cursor: pointer;
-  transition: transform var(--transition), box-shadow var(--transition);
-}
-
-.card-hoverable:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
-}
-
-.form-hint {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.alert-info {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
-}
-
-.role-badge {
-  display: inline-flex;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.role-admin { background: #ede9fe; color: #5b21b6; }
-.role-user { background: #dbeafe; color: #1e40af; }
-
-.section-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  letter-spacing: -0.01em;
-}
-
-.section-desc {
-  color: var(--color-text-muted);
-  font-size: 14px;
-  margin-bottom: 20px;
-}
-
+/* ---- Cards ---- */
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.card-hoverable {
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+
+.card-hoverable:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-strong);
+}
+
+/* ---- Forms ---- */
+.form-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
 .form-group {
@@ -396,6 +392,7 @@ a:hover {
   font-size: 14px;
   background: var(--color-surface);
   transition: border-color var(--transition), box-shadow var(--transition);
+  color: var(--color-text);
 }
 
 .form-input:focus,
@@ -406,16 +403,26 @@ a:hover {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: var(--color-text-light);
+}
+
 .form-textarea {
   resize: vertical;
   min-height: 100px;
 }
 
+/* ---- Alerts ---- */
 .alert {
   padding: 12px 16px;
   border-radius: var(--radius-md);
   font-size: 14px;
   margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
 }
 
 .alert-error {
@@ -430,6 +437,19 @@ a:hover {
   border: 1px solid #a7f3d0;
 }
 
+.alert-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.alert-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+/* ---- Loading ---- */
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -453,6 +473,7 @@ a:hover {
   to { transform: rotate(360deg); }
 }
 
+/* ---- Badges ---- */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -462,27 +483,74 @@ a:hover {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
+/* Priority badges */
 .priority-low { background: #d1fae5; color: #065f46; }
 .priority-medium { background: #fef3c7; color: #92400e; }
 .priority-high { background: #fee2e2; color: #991b1b; }
 .priority-urgent { background: #ede9fe; color: #5b21b6; }
 
+/* Status badges — covers both old snake_case and new GitHub Project space-separated names */
+/* These CSS classes are generated by: ticket.status.toLowerCase().replace(/\s+/g, '-') */
 .status-open { background: #dbeafe; color: #1e40af; }
-.status-in_progress, .status-in-progress { background: #fef3c7; color: #92400e; }
-.status-in_verification, .status-in-review { background: #f3e8ff; color: #6b21a8; }
-.status-resolved, .status-done { background: #d1fae5; color: #065f46; }
-.status-closed { background: #f3e8ff; color: #6b21a8; }
+.status-in_progress,
+.status-in-progress { background: #fef3c7; color: #92400e; }
+.status-in_verification,
+.status-in-review { background: #f3e8ff; color: #6b21a8; }
+.status-resolved,
+.status-done { background: #d1fae5; color: #065f46; }
+.status-closed { background: #f1f5f9; color: #475569; }
 .status-to-triage { background: #fee2e2; color: #991b1b; }
-.status-backlog { background: #d1fae5; color: #065f46; }
+.status-backlog { background: #e0f2fe; color: #0369a1; }
 .status-ready { background: #dbeafe; color: #1e40af; }
-.github-badge-link { margin-left: 8px; display: inline-flex; align-items: center; }
-.github-badge-link:hover { opacity: 0.85; text-decoration: none; }
 
+/* GitHub badge link */
+.github-badge-link {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.github-badge-link:hover {
+  opacity: 0.85;
+  text-decoration: none;
+}
+
+/* ---- Role badges ---- */
+.role-badge {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.role-admin { background: #ede9fe; color: #5b21b6; }
+.role-user { background: #dbeafe; color: #1e40af; }
+
+/* ---- Typography helpers ---- */
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+
+.section-desc {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+/* ---- Empty states ---- */
 .empty-state {
   text-align: center;
-  padding: 48px 24px;
+  padding: 56px 24px;
   color: var(--color-text-muted);
 }
 
@@ -490,8 +558,37 @@ a:hover {
   font-size: 48px;
   margin-bottom: 16px;
   opacity: 0.5;
+  display: block;
+  animation: float 3s ease-in-out infinite;
 }
 
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+/* ---- Ticket done styling ---- */
+.ticket-card-done {
+  opacity: 0.72;
+}
+
+.ticket-card-done .ticket-header h3 {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-text-light);
+}
+
+/* ---- Sync button animation ---- */
+@keyframes rotating {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sync-spinning {
+  display: inline-block;
+  animation: rotating 1s linear infinite;
+}
+
+/* ---- Responsive ---- */
 @media (max-width: 640px) {
   .page-content {
     padding: 20px 16px;

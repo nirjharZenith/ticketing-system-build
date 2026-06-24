@@ -10,18 +10,21 @@ __v0_jsx-dev-runtime.ts
 .env
 .env.local
 .env*.local
+.env.prod
 
 # Node modules and build artifacts
 node_modules/
 dist/
 build/
 *.tsbuildinfo
+coverage/
 
 # Backend
 backend/uploads/
 backend/node_modules/
 backend/.env
 backend/.env.local
+backend/.env.prod
 
 # Frontend
 frontend/node_modules/
@@ -45,4 +48,5 @@ pnpm-debug.log*
 # Optional npm cache
 .npm
 .pnpm-store/
-
+.agents/
+.agent/

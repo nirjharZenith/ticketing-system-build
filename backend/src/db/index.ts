@@ -17,7 +17,12 @@ const getPoolConfig = (): PoolConfig => {
     );
   }
 
-  const config: PoolConfig = { connectionString };
+  const config: PoolConfig = {
+    connectionString,
+    max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+    idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '30000', 10),
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '5000', 10),
+  };
 
   if (
     process.env.NODE_ENV === 'production' ||
@@ -29,6 +34,7 @@ const getPoolConfig = (): PoolConfig => {
 
   return config;
 };
+
 
 const pool = new Pool(getPoolConfig());
 

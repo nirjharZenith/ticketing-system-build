@@ -1,7 +1,9 @@
 import { query } from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import * as githubIssueService from './githubIssueService';
+import { addIssueToProject, isProjectConfigured } from './githubProjectService';
 import { NotFoundError, ValidationError as ValidationErrorClass } from '../middleware/errorHandler';
+
 
 export const createTicket = async (
   orgId: string,
@@ -35,6 +37,13 @@ export const createTicket = async (
 
     // Log activity
     await logTicketActivity(ticketId, creatorId, 'created', null, `Ticket created`);
+
+    // Add the new issue to the GitHub Project board (fire-and-forget, requires Classic PAT + project scope)
+    if (githubIssueNodeId && isProjectConfigured()) {
+      addIssueToProject(githubIssueNodeId).catch((err) => {
+        console.error('[ticketService] Failed to add issue to GitHub Project:', err.message);
+      });
+    }
 
     return insertResult.rows[0];
   } catch (error) {
@@ -107,7 +116,8 @@ export const updateTicket = async (
   updates: Record<string, any>,
   userId: string
 ) => {
-  const allowedFields = ['title', 'description', 'priority', 'status', 'assigned_to'];
+  // status is managed exclusively by GitHub webhooks/polling — never via API update
+  const allowedFields = ['title', 'description', 'priority', 'assigned_to'];
   const updateFields: string[] = [];
   const updateValues: any[] = [];
   let paramIndex = 1;

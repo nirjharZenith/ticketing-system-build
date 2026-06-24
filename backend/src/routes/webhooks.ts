@@ -18,7 +18,8 @@ const verifyGitHubWebhook = (req: Request, res: Response, next: express.NextFunc
     return res.status(401).json({ error: 'No signature provided' });
   }
 
-  const payload = JSON.stringify(req.body);
+  // Use rawBody buffer if available (set by express.json verify), otherwise fallback to JSON.stringify (which might break signature)
+  const payload = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
   const hmac = crypto.createHmac('sha256', secret);
   const digest = `sha256=${hmac.update(payload).digest('hex')}`;
 
@@ -43,7 +44,10 @@ router.post('/github', verifyGitHubWebhook, async (req: Request, res: Response) 
       const changes = payload.changes;
 
       if (changes?.field_value?.field_name === 'Status') {
-        const newStatusStr = changes.field_value.to;
+        const toValue = changes.field_value.to;
+        const newStatusStr = (typeof toValue === 'object' && toValue !== null && toValue.name) 
+          ? toValue.name 
+          : toValue;
 
         if (newStatusStr && item?.content_node_id) {
           const contentNodeId = item.content_node_id;

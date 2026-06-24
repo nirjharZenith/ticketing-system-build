@@ -1,123 +1,152 @@
-import { Router, Response, Router as ExpressRouter } from 'express';
+import express, { Request, Response } from 'express';
 import { AuthRequest, authenticateToken } from '../middleware/auth';
+import { checkOrgMembership } from '../middleware/checkOrgMembership';
 import * as ticketService from '../services/ticketService';
 import * as emailService from '../services/emailService';
 import { query } from '../db';
-import { isValidUUID, validateTicketCreation, isValidPriority, isValidStatus, ValidationException, isValidPagination } from '../utils/validation';
-import { AuthenticationError, AuthorizationError, NotFoundError } from '../middleware/errorHandler';
+import {
+  isValidUUID,
+  validateTicketCreation,
+  isValidPriority,
+  ValidationException,
+  isValidPagination,
+} from '../utils/validation';
+import {
+  AuthorizationError,
+  NotFoundError,
+  asyncHandler,
+} from '../middleware/errorHandler';
+import * as githubIssueService from '../services/githubIssueService';
 import { createGithubIssueComment } from '../services/githubIssueService';
 import { emitToOrg } from '../services/socketService';
+import { syncProjectStatusesToDB, isProjectConfigured } from '../services/githubProjectService';
+import { logger } from '../middleware/logger';
 
-const router: ExpressRouter = Router();
+const router: express.Router = express.Router();
 
-// Middleware to check org membership
-const checkOrgMembership = async (req: AuthRequest, res: Response, next: any) => {
-  try {
-    const { org_id } = req.params;
-    
-    if (!req.user) {
-      throw new AuthenticationError('Unauthorized');
-    }
-
-    if (!isValidUUID(org_id)) {
-      throw new NotFoundError('Organization');
-    }
-
-    const result = await query(
-      'SELECT role FROM user_organisations WHERE user_id = $1 AND organisation_id = $2',
-      [req.user.id, org_id]
-    );
-
-    if (result.rows.length === 0) {
-      throw new AuthorizationError('Access denied');
-    }
-
-    req.user.org_role = result.rows[0].role;
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
-
+// ──────────────────────────────────────────
 // Create ticket
-router.post('/:org_id/tickets', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response, next: any) => {
-  try {
+// ──────────────────────────────────────────
+router.post(
+  '/:org_id/tickets',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { org_id } = req.params;
     const { title, description, priority } = req.body;
 
-    // Validate input
     const validationErrors = validateTicketCreation({ title, description, priority });
     if (validationErrors.length > 0) {
       throw new ValidationException(validationErrors);
     }
 
-    const ticket = await ticketService.createTicket(org_id, req.user!.id, title, description || '', priority || 'medium');
-    
-    // Send notification emails to organization members (fire and forget)
+    const ticket = await ticketService.createTicket(
+      org_id,
+      req.user!.id,
+      title,
+      description || '',
+      priority || 'medium'
+    );
+
+    // Fire-and-forget email notifications
     try {
-      const membersResult = await query(
-        `SELECT u.email, u.name FROM users u
-         INNER JOIN user_organisations uo ON u.id = uo.user_id
-         WHERE uo.organisation_id = $1 AND u.is_active = true AND u.id != $2`,
-        [org_id, req.user!.id]
-      );
-
-      const creatorResult = await query('SELECT name FROM users WHERE id = $1', [req.user!.id]);
+      const [membersResult, creatorResult] = await Promise.all([
+        query(
+          `SELECT u.email, u.name FROM users u
+           INNER JOIN user_organisations uo ON u.id = uo.user_id
+           WHERE uo.organisation_id = $1 AND u.is_active = true AND u.id != $2`,
+          [org_id, req.user!.id]
+        ),
+        query('SELECT name FROM users WHERE id = $1', [req.user!.id]),
+      ]);
       const creatorName = creatorResult.rows[0]?.name || 'Unknown';
-
       for (const member of membersResult.rows) {
-        emailService.sendTicketCreatedEmail(member.email, title, ticket.id, creatorName).catch((err) => {
-          console.error('[v0] Failed to send notification email:', err);
-        });
+        emailService
+          .sendTicketCreatedEmail(member.email, title, ticket.id, creatorName)
+          .catch((err) => logger.error('[tickets] Failed to send creation email', { err: err.message }));
       }
-    } catch (emailError) {
-      console.error('[v0] Error sending notification emails:', emailError);
-      // Don't fail the request if email fails
+    } catch (emailError: any) {
+      logger.error('[tickets] Error fetching members for email', { err: emailError.message });
     }
 
     emitToOrg(org_id, 'ticket:created', ticket);
     res.status(201).json({ success: true, ticket });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
-// Get organization tickets
-router.get('/:org_id/tickets', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
-  const { org_id } = req.params;
-  const { status, priority, assignedTo, page, limit } = req.query;
+// ──────────────────────────────────────────
+// List org tickets
+// ──────────────────────────────────────────
+router.get(
+  '/:org_id/tickets',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { org_id } = req.params;
+    const { status, priority, assignedTo, page, limit } = req.query;
 
-  const filters: any = {};
-  if (status) filters.status = status;
-  if (priority) filters.priority = priority;
-  if (assignedTo) filters.assignedTo = assignedTo;
+    const filters: any = {};
+    if (status) filters.status = status;
+    if (priority) filters.priority = priority;
+    if (assignedTo) filters.assignedTo = assignedTo;
 
-  const pagination = isValidPagination(page || 1, limit || 20);
-  if (pagination) {
-    filters.limit = pagination.limit;
-    filters.offset = (pagination.page - 1) * pagination.limit;
-  }
+    const pagination = isValidPagination(page || 1, limit || 20);
+    if (pagination) {
+      filters.limit = pagination.limit;
+      filters.offset = (pagination.page - 1) * pagination.limit;
+    }
 
-  const tickets = await ticketService.getOrgTickets(org_id, filters);
-  res.json(tickets);
-});
+    const tickets = await ticketService.getOrgTickets(org_id, filters);
+    res.json(tickets);
+  })
+);
 
+// ──────────────────────────────────────────
 // Get single ticket
-router.get('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
-  const { org_id, ticket_id } = req.params;
-  const ticket = await ticketService.getTicketById(ticket_id, org_id);
-  res.json(ticket);
-});
-
-// Update ticket
-router.patch('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
+// ──────────────────────────────────────────
+router.get(
+  '/:org_id/tickets/:ticket_id',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { org_id, ticket_id } = req.params;
-    const updates = req.body;
 
-    // Check if user is admin or creator and fetch status/github info for constraints/sync
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
+
+    const ticket = await ticketService.getTicketById(ticket_id, org_id);
+    res.json(ticket);
+  })
+);
+
+// ──────────────────────────────────────────
+// Update ticket (status field blocked — GitHub-only via webhook/polling)
+// ──────────────────────────────────────────
+router.patch(
+  '/:org_id/tickets/:ticket_id',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { org_id, ticket_id } = req.params;
+
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
+
+    // Strip status — status is managed exclusively by GitHub webhook/polling
+    const { status: _ignoredStatus, ...updates } = req.body;
+
+    // Validate priority if provided
+    if (updates.priority !== undefined && !isValidPriority(updates.priority)) {
+      throw new ValidationException([
+        { field: 'priority', message: 'Invalid priority. Must be: low, medium, high, or urgent' },
+      ]);
+    }
+
     const ticketResult = await query(
-      'SELECT creator_id, title, status, github_issue_number, github_repo_owner, github_repo_name FROM tickets WHERE id = $1',
-      [ticket_id]
+      'SELECT creator_id, title, status, github_issue_number, github_repo_owner, github_repo_name FROM tickets WHERE id = $1 AND organisation_id = $2',
+      [ticket_id, org_id]
     );
 
     if (ticketResult.rows.length === 0) {
@@ -126,212 +155,296 @@ router.patch('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembershi
 
     const currentTicket = ticketResult.rows[0];
 
-    // Enforce closed ticket constraints: only description updates allowed
-    if (currentTicket.status === 'closed') {
-      const allowedFields = ['description'];
-      const updateKeys = Object.keys(updates);
-      const nonDescKeys = updateKeys.filter(k => k !== 'description');
-      if (nonDescKeys.length > 0) {
-        throw new ValidationException([{ field: 'status', message: 'Ticket is closed' }]);
-      }
-    }
-
     if (req.user!.org_role !== 'admin' && currentTicket.creator_id !== req.user!.id) {
       throw new AuthorizationError('Only creator or admin can update');
     }
 
     const ticket = await ticketService.updateTicket(ticket_id, org_id, updates, req.user!.id);
 
-    // Sync updates to GitHub if ticket is linked to a GitHub issue
+    // Sync title/description to GitHub if linked
     if (currentTicket.github_issue_number) {
-      const githubIssueService = require('../services/githubIssueService');
-      
-      // If transitioned to closed, close it on GitHub
-      if (updates.status === 'closed' && currentTicket.status !== 'closed') {
-        githubIssueService.closeGithubIssue(
-          currentTicket.github_repo_owner,
-          currentTicket.github_repo_name,
-          currentTicket.github_issue_number
-        ).catch((err: any) => {
-          console.error('[github-issue] Failed to close GitHub issue on update:', err);
-        });
-      }
-
-      // If title or description changed, update it on GitHub
       if (updates.title !== undefined || updates.description !== undefined) {
-        githubIssueService.updateGithubIssue(
-          currentTicket.github_repo_owner,
-          currentTicket.github_repo_name,
-          currentTicket.github_issue_number,
-          updates.title,
-          updates.description,
-          ticket_id
-        ).catch((err: any) => {
-          console.error('[github-issue] Failed to update GitHub issue on update:', err);
-        });
+        githubIssueService
+          .updateGithubIssue(
+            currentTicket.github_repo_owner,
+            currentTicket.github_repo_name,
+            currentTicket.github_issue_number,
+            updates.title,
+            updates.description,
+            ticket_id
+          )
+          .catch((err: any) =>
+            logger.error('[tickets] Failed to update GitHub issue', { err: err.message })
+          );
       }
     }
-    
-    // Send notification emails about updates (fire and forget)
+
+    // Fire-and-forget email notifications
     try {
       if (updates.assigned_to) {
-        const assignedUserResult = await query('SELECT email FROM users WHERE id = $1', [updates.assigned_to]);
-        const userResult = await query('SELECT name FROM users WHERE id = $1', [req.user!.id]);
-        
+        const [assignedUserResult, userResult] = await Promise.all([
+          query('SELECT email FROM users WHERE id = $1', [updates.assigned_to]),
+          query('SELECT name FROM users WHERE id = $1', [req.user!.id]),
+        ]);
         if (assignedUserResult.rows.length > 0) {
-          const assignedEmail = assignedUserResult.rows[0].email;
-          const updaterName = userResult.rows[0]?.name || 'Unknown';
-          
-          emailService.sendAssignmentEmail(
-            assignedEmail,
-            ticketResult.rows[0].title,
-            ticket_id,
-            updaterName
-          ).catch((err) => {
-            console.error('[v0] Failed to send assignment email:', err);
-          });
+          emailService
+            .sendAssignmentEmail(
+              assignedUserResult.rows[0].email,
+              currentTicket.title,
+              ticket_id,
+              userResult.rows[0]?.name || 'Unknown'
+            )
+            .catch((err) => logger.error('[tickets] Failed to send assignment email', { err: err.message }));
         }
       }
 
-      // Notify organization members about status/priority changes
-      if (updates.status || updates.priority) {
-        const membersResult = await query(
-          `SELECT u.email, u.name FROM users u
-           INNER JOIN user_organisations uo ON u.id = uo.user_id
-           WHERE uo.organisation_id = $1 AND u.is_active = true AND u.id != $2`,
-          [org_id, req.user!.id]
-        );
-
-        const updaterResult = await query('SELECT name FROM users WHERE id = $1', [req.user!.id]);
+      if (updates.priority) {
+        const [membersResult, updaterResult] = await Promise.all([
+          query(
+            `SELECT u.email, u.name FROM users u
+             INNER JOIN user_organisations uo ON u.id = uo.user_id
+             WHERE uo.organisation_id = $1 AND u.is_active = true AND u.id != $2`,
+            [org_id, req.user!.id]
+          ),
+          query('SELECT name FROM users WHERE id = $1', [req.user!.id]),
+        ]);
         const updaterName = updaterResult.rows[0]?.name || 'Unknown';
         const changes = JSON.stringify(updates);
-
         for (const member of membersResult.rows) {
-          emailService.sendTicketUpdatedEmail(
-            member.email,
-            ticketResult.rows[0].title,
-            ticket_id,
-            updaterName,
-            changes
-          ).catch((err) => {
-            console.error('[v0] Failed to send update email:', err);
-          });
+          emailService
+            .sendTicketUpdatedEmail(member.email, currentTicket.title, ticket_id, updaterName, changes)
+            .catch((err) => logger.error('[tickets] Failed to send update email', { err: err.message }));
         }
       }
-    } catch (emailError) {
-      console.error('[v0] Error sending notification emails:', emailError);
+    } catch (emailError: any) {
+      logger.error('[tickets] Error sending update emails', { err: emailError.message });
     }
 
     emitToOrg(org_id, 'ticket:updated', ticket);
     res.json(ticket);
-});
+  })
+);
 
+// ──────────────────────────────────────────
 // Delete ticket (admin only)
-router.delete('/:org_id/tickets/:ticket_id', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
-  const { org_id, ticket_id } = req.params;
+// ──────────────────────────────────────────
+router.delete(
+  '/:org_id/tickets/:ticket_id',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { org_id, ticket_id } = req.params;
 
-  if (req.user!.org_role !== 'admin') {
-    throw new AuthorizationError('Only admins can delete');
-  }
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
 
-  const success = await ticketService.deleteTicket(ticket_id, org_id);
+    if (req.user!.org_role !== 'admin') {
+      throw new AuthorizationError('Only admins can delete tickets');
+    }
 
-  if (!success) {
-    throw new NotFoundError('Ticket');
-  }
+    const success = await ticketService.deleteTicket(ticket_id, org_id);
+    if (!success) {
+      throw new NotFoundError('Ticket');
+    }
 
-  emitToOrg(org_id, 'ticket:deleted', { id: ticket_id });
-  res.json({ success: true });
-});
+    emitToOrg(org_id, 'ticket:deleted', { id: ticket_id });
+    res.json({ success: true });
+  })
+);
 
+// ──────────────────────────────────────────
 // Get ticket activity
-router.get('/:org_id/tickets/:ticket_id/activity', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
-  const { ticket_id } = req.params;
-  const activity = await ticketService.getTicketActivity(ticket_id);
-  res.json(activity);
-});
+// ──────────────────────────────────────────
+router.get(
+  '/:org_id/tickets/:ticket_id/activity',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { org_id, ticket_id } = req.params;
 
-// Add attachment (metadata only — prefer upload endpoint for files)
-router.post('/:org_id/tickets/:ticket_id/attachments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
-  const { org_id, ticket_id } = req.params;
-  const { filename, fileUrl } = req.body;
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
 
-  if (!filename || !fileUrl) {
-    throw new ValidationException([{ field: 'filename', message: 'Filename and fileUrl required' }]);
-  }
+    // Verify ticket belongs to this org
+    const ticketCheck = await query(
+      'SELECT id FROM tickets WHERE id = $1 AND organisation_id = $2',
+      [ticket_id, org_id]
+    );
+    if (ticketCheck.rows.length === 0) {
+      throw new NotFoundError('Ticket');
+    }
 
-  const ticketResult = await query(
-    'SELECT id FROM tickets WHERE id = $1 AND organisation_id = $2',
-    [ticket_id, org_id]
-  );
+    const activity = await ticketService.getTicketActivity(ticket_id);
+    res.json(activity);
+  })
+);
 
-  if (ticketResult.rows.length === 0) {
-    throw new NotFoundError('Ticket');
-  }
+// ──────────────────────────────────────────
+// Add attachment metadata
+// ──────────────────────────────────────────
+router.post(
+  '/:org_id/tickets/:ticket_id/attachments',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { org_id, ticket_id } = req.params;
+    const { filename, fileUrl } = req.body;
 
-  const attachment = await ticketService.addAttachment(ticket_id, filename, fileUrl, req.user!.id);
-  res.status(201).json(attachment);
-});
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
 
+    if (!filename || !fileUrl) {
+      throw new ValidationException([
+        { field: 'filename', message: 'Filename and fileUrl are required' },
+      ]);
+    }
+
+    const ticketResult = await query(
+      'SELECT id FROM tickets WHERE id = $1 AND organisation_id = $2',
+      [ticket_id, org_id]
+    );
+    if (ticketResult.rows.length === 0) {
+      throw new NotFoundError('Ticket');
+    }
+
+    const attachment = await ticketService.addAttachment(ticket_id, filename, fileUrl, req.user!.id);
+    res.status(201).json(attachment);
+  })
+);
+
+// ──────────────────────────────────────────
 // Get ticket attachments
-router.get('/:org_id/tickets/:ticket_id/attachments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response) => {
-  const { ticket_id } = req.params;
-  const attachments = await ticketService.getTicketAttachments(ticket_id);
-  res.json(attachments);
-});
+// ──────────────────────────────────────────
+router.get(
+  '/:org_id/tickets/:ticket_id/attachments',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { org_id, ticket_id } = req.params;
 
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
+
+    const ticketCheck = await query(
+      'SELECT id FROM tickets WHERE id = $1 AND organisation_id = $2',
+      [ticket_id, org_id]
+    );
+    if (ticketCheck.rows.length === 0) {
+      throw new NotFoundError('Ticket');
+    }
+
+    const attachments = await ticketService.getTicketAttachments(ticket_id);
+    res.json(attachments);
+  })
+);
+
+// ──────────────────────────────────────────
 // Get ticket comments
-router.get('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response, next: any) => {
-  try {
+// ──────────────────────────────────────────
+router.get(
+  '/:org_id/tickets/:ticket_id/comments',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { ticket_id } = req.params;
-    const localComments = await ticketService.getComments(ticket_id);
-    res.json(localComments);
-  } catch (error) {
-    next(error);
-  }
-});
 
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
+    }
+
+    const comments = await ticketService.getComments(ticket_id);
+    res.json(comments);
+  })
+);
+
+// ──────────────────────────────────────────
 // Add ticket comment
-router.post('/:org_id/tickets/:ticket_id/comments', authenticateToken, checkOrgMembership, async (req: AuthRequest, res: Response, next: any) => {
-  try {
+// ──────────────────────────────────────────
+const MAX_COMMENT_LENGTH = 5000;
+
+router.post(
+  '/:org_id/tickets/:ticket_id/comments',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { org_id, ticket_id } = req.params;
     const { comment } = req.body;
 
-    if (!comment || typeof comment !== 'string' || !comment.trim()) {
-      return res.status(400).json({ error: 'Comment text is required' });
+    if (!isValidUUID(ticket_id)) {
+      throw new NotFoundError('Ticket');
     }
 
-    const createdComment = await ticketService.addComment(ticket_id, req.user!.id, comment);
+    if (!comment || typeof comment !== 'string' || !comment.trim()) {
+      throw new ValidationException([{ field: 'comment', message: 'Comment text is required' }]);
+    }
 
-    // Sync to GitHub if ticket is linked to a GitHub issue
+    if (comment.trim().length > MAX_COMMENT_LENGTH) {
+      throw new ValidationException([
+        {
+          field: 'comment',
+          message: `Comment must not exceed ${MAX_COMMENT_LENGTH} characters`,
+        },
+      ]);
+    }
+
+    // Verify ticket belongs to org
     const ticketResult = await query(
-      'SELECT github_issue_number, github_repo_owner, github_repo_name FROM tickets WHERE id = $1',
-      [ticket_id]
+      'SELECT github_issue_number, github_repo_owner, github_repo_name FROM tickets WHERE id = $1 AND organisation_id = $2',
+      [ticket_id, org_id]
     );
+    if (ticketResult.rows.length === 0) {
+      throw new NotFoundError('Ticket');
+    }
 
-    if (ticketResult.rows.length > 0) {
-      const ticket = ticketResult.rows[0];
-      if (ticket.github_issue_number && ticket.github_repo_owner && ticket.github_repo_name) {
-        const usernameResult = await query('SELECT name, email FROM users WHERE id = $1', [req.user!.id]);
-        const userRow = usernameResult.rows[0];
-        const username = userRow ? (userRow.name || userRow.email.split('@')[0]) : 'user';
-        const commentBody = `**Comment from ${username} (via Zenith):**\n\n${comment}`;
-        createGithubIssueComment(
-          ticket.github_repo_owner,
-          ticket.github_repo_name,
-          ticket.github_issue_number,
-          commentBody
-        ).catch((err: any) => {
-          console.error('[github-issue] Failed to sync comment to GitHub:', err);
-        });
-      }
+    const createdComment = await ticketService.addComment(ticket_id, req.user!.id, comment.trim());
+
+    // Sync comment to GitHub (fire-and-forget)
+    const ticket = ticketResult.rows[0];
+    if (ticket.github_issue_number && ticket.github_repo_owner && ticket.github_repo_name) {
+      const usernameResult = await query('SELECT name, email FROM users WHERE id = $1', [req.user!.id]);
+      const userRow = usernameResult.rows[0];
+      const username = userRow ? userRow.name || userRow.email.split('@')[0] : 'user';
+      const commentBody = `**Comment from ${username} (via Zenith):**\n\n${comment.trim()}`;
+      createGithubIssueComment(
+        ticket.github_repo_owner,
+        ticket.github_repo_name,
+        ticket.github_issue_number,
+        commentBody
+      ).catch((err: any) =>
+        logger.error('[tickets] Failed to sync comment to GitHub', { err: err.message })
+      );
     }
 
     emitToOrg(org_id, 'ticket:commented', { ticket_id, comment: createdComment });
     res.status(201).json(createdComment);
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
+
+// ──────────────────────────────────────────
+// Manual GitHub Project sync
+// ──────────────────────────────────────────
+router.post(
+  '/:org_id/sync-github',
+  authenticateToken,
+  checkOrgMembership,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!isProjectConfigured()) {
+      return res.status(400).json({
+        success: false,
+        message: 'GitHub Project not configured. Set GITHUB_PROJECT_NUMBER in backend .env.',
+      });
+    }
+    const updatedCount = await syncProjectStatusesToDB();
+    res.json({
+      success: true,
+      updatedCount,
+      message: `Synced ${updatedCount} ticket(s) from GitHub Project`,
+    });
+  })
+);
 
 export default router;

@@ -41,12 +41,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     socketInstance.on('connect', () => {
       setIsConnected(true);
-      console.log('Socket connected:', socketInstance.id);
     });
 
     socketInstance.on('disconnect', () => {
       setIsConnected(false);
-      console.log('Socket disconnected');
     });
 
     setSocket(socketInstance);

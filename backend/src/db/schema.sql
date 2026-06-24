@@ -38,8 +38,14 @@ CREATE TABLE IF NOT EXISTS tickets (
   title VARCHAR(255) NOT NULL,
   description TEXT,
   priority VARCHAR(50) DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  status VARCHAR(50) DEFAULT 'To triage',
+  status VARCHAR(100) DEFAULT 'To triage',
   assigned_to UUID REFERENCES users(id),
+  -- GitHub integration columns
+  github_issue_number INTEGER,
+  github_issue_url VARCHAR(512),
+  github_repo_owner VARCHAR(255),
+  github_repo_name VARCHAR(255),
+  github_issue_node_id VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   resolved_at TIMESTAMP
@@ -75,28 +81,38 @@ CREATE TABLE IF NOT EXISTS ticket_comments (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Alter existing tickets table for github integration if columns do not exist
+-- Idempotent migrations for existing databases (adding columns if they don't exist)
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_issue_number INTEGER;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_issue_url VARCHAR(512);
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_repo_owner VARCHAR(255);
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_repo_name VARCHAR(255);
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS github_issue_node_id VARCHAR(255);
 
--- Ensure the check constraint on existing tables allows 'in_verification'
+-- Update status check constraint to allow GitHub Projects statuses
 DO $$
 BEGIN
   ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_status_check;
-  ALTER TABLE tickets ADD CONSTRAINT tickets_status_check CHECK (status IN ('open', 'in_progress', 'in_verification', 'resolved', 'closed'));
+  ALTER TABLE tickets ADD CONSTRAINT tickets_status_check CHECK (
+    status IN (
+      'To triage', 'Backlog', 'Ready', 'In progress', 'In review', 'Done',
+      -- Legacy statuses kept for backwards compatibility
+      'open', 'in_progress', 'in_verification', 'resolved', 'closed'
+    )
+  );
 EXCEPTION
   WHEN OTHERS THEN
     NULL;
 END $$;
 
--- Create indexes for better query performance
+-- Indexes for query performance
 CREATE INDEX IF NOT EXISTS idx_user_organisations_user_id ON user_organisations(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_organisations_org_id ON user_organisations(organisation_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_organisation_id ON tickets(organisation_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator_id ON tickets(creator_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_assigned_to ON tickets(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+CREATE INDEX IF NOT EXISTS idx_tickets_priority ON tickets(priority);
+CREATE INDEX IF NOT EXISTS idx_tickets_github_node_id ON tickets(github_issue_node_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket_id ON ticket_attachments(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_activity_ticket_id ON ticket_activity(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_comments_ticket_id ON ticket_comments(ticket_id);

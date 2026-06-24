@@ -14,9 +14,8 @@
   },
   "include": ["backend", "frontend"],
   "references": [
-    { "path": "./backend" ,"composite": true},
-    { "path": "./frontend" ,"composite": true},
-    { "path": "./docs" ,"composite": true}
+    { "path": "./backend" },
+    { "path": "./frontend" }
   ],
   "exclude": ["node_modules"]
 }

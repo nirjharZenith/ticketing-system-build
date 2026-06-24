@@ -50,9 +50,14 @@ export const isValidPriority = (priority: string): boolean => {
   return ['low', 'medium', 'high', 'urgent'].includes(priority.toLowerCase());
 };
 
-// Status validation
+// Status validation — must match the 6 GitHub Project column names exactly (case-insensitive)
 export const isValidStatus = (status: string): boolean => {
-  return ['open', 'in_progress', 'in_verification', 'resolved', 'closed', 'to triage', 'backlog', 'ready', 'in progress', 'in review', 'done'].includes(status.toLowerCase());
+  const VALID_STATUSES = [
+    'to triage', 'backlog', 'ready', 'in progress', 'in review', 'done',
+    // legacy statuses kept for backwards compatibility
+    'open', 'in_progress', 'in_verification', 'resolved', 'closed',
+  ];
+  return VALID_STATUSES.includes(status.toLowerCase());
 };
 
 // Organization name validation

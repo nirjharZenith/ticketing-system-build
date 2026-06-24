@@ -25,8 +25,13 @@ const startServer = async () => {
     const { initializeSocket } = await import('./services/socketService');
     initializeSocket(server);
 
+    // Start GitHub Project status polling (syncs every 30s if GITHUB_PROJECT_NUMBER is set)
+    const { startProjectPolling, stopProjectPolling } = await import('./services/githubProjectService');
+    startProjectPolling(30_000);
+
     const shutdown = async (signal: string) => {
       logger.info(`[server] Received ${signal}. Starting graceful shutdown...`);
+      stopProjectPolling();
       if (server) {
         server.close(async () => {
           logger.info('[server] HTTP server closed.');

@@ -43,6 +43,14 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+const NotFoundPage: React.FC = () => (
+  <div className="loading-state" style={{ minHeight: '100vh', flexDirection: 'column', gap: 16 }}>
+    <div style={{ fontSize: 64, opacity: 0.5 }}>🔍</div>
+    <h2 style={{ fontSize: 24, fontWeight: 700 }}>404 — Page not found</h2>
+    <a href="/dashboard" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>← Back to dashboard</a>
+  </div>
+);
+
 function App() {
   return (
     <Router>
@@ -98,6 +106,7 @@ function App() {
               }
             />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </SocketProvider>
       </AuthProvider>
