@@ -48,7 +48,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({
       <header className="app-header">
         <div className="header-left">
           <Link to="/dashboard" className="app-brand">
-            <span className="brand-icon">T</span>
+            <img src="/android-chrome-192x192.png" alt="Zenith logo" className="brand-icon" />
             <span>Zenith Tickets</span>
           </Link>
 

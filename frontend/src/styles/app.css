@@ -1,0 +1,80 @@
+/* ============================================================
+   App-level route component styles
+   ============================================================ */
+
+/* Full-screen loading overlay (ProtectedRoute / PublicRoute) */
+.loading-fullscreen {
+  min-height: 100vh;
+}
+
+/* 404 Not-Found page layout */
+.not-found-page {
+  min-height: 100vh;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.not-found-icon {
+  font-size: 64px;
+  opacity: 0.5;
+}
+
+.not-found-title {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.not-found-link {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ============================================================
+   Shared empty-state helpers (used across pages)
+   ============================================================ */
+
+/* Primary label inside an empty-state card */
+.empty-state-label {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+/* Secondary hint text inside an empty-state card */
+.empty-state-hint {
+  font-size: 14px;
+}
+
+/* Span all grid columns */
+.empty-state-full-width {
+  grid-column: 1 / -1;
+}
+
+/* ============================================================
+   Sync icon — TicketsPage
+   ============================================================ */
+.sync-icon {
+  display: inline-block;
+}
+
+/* ============================================================
+   Upload button — TicketDetailPage
+   ============================================================ */
+.upload-btn {
+  margin-top: 12px;
+}
+
+/* ============================================================
+   Comment form group — TicketDetailPage
+   ============================================================ */
+.comment-form-group {
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   Alert with top spacing — ImageUploader
+   ============================================================ */
+.alert-spaced {
+  margin-top: 12px;
+}

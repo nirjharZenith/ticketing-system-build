@@ -43,7 +43,7 @@ const LoginPage: React.FC = () => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="auth-brand-icon">T</span>
+          <img src="/android-chrome-192x192.png" alt="Zenith logo" className="auth-brand-icon" />
         </div>
         <h1>Welcome back</h1>
         <p className="auth-subtitle">Sign in to your Zenith Tickets account</p>

@@ -115,7 +115,7 @@ const DashboardPage: React.FC = () => {
         {organizations.length === 0 ? (
           <Card className="empty-state">
             <span className="empty-state-icon">🏢</span>
-            <p style={{ fontWeight: 600, fontSize: 16, color: 'var(--color-text)', marginBottom: 8 }}>No organizations yet</p>
+            <p className="empty-state-label">No organizations yet</p>
             <p>Create one above to start managing tickets with your team.</p>
           </Card>
         ) : (

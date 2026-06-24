@@ -420,7 +420,7 @@ const TicketDetailPage: React.FC = () => {
                   disabled={uploading}
                 />
                 {uploadImages.length > 0 && (
-                  <button type="button" onClick={handleUpload} disabled={uploading} className="btn btn-primary" style={{ marginTop: 12 }}>
+                  <button type="button" onClick={handleUpload} disabled={uploading} className="btn btn-primary upload-btn">
                     {uploading ? 'Uploading...' : `Upload ${uploadImages.length} image(s)`}
                   </button>
                 )}
@@ -452,7 +452,7 @@ const TicketDetailPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleCommentSubmit} className="comment-form">
-              <div className="form-group" style={{ marginBottom: 12 }}>
+              <div className="form-group comment-form-group">
                 <Textarea
                   value={newCommentText}
                   onChange={(e: any) => setNewCommentText(e.target.value)}

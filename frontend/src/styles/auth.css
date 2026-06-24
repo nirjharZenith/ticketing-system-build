@@ -24,16 +24,12 @@
 }
 
 .auth-brand-icon {
-  width: 52px;
-  height: 52px;
-  background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 24px;
-  font-weight: 700;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  display: block;
 }
 
 .auth-card h1 {

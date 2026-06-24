@@ -186,7 +186,7 @@ const TicketsPage: React.FC = () => {
             disabled={syncing}
             title="Sync ticket statuses from GitHub Project"
           >
-            <span className={syncing ? 'sync-spinning' : ''} style={{ display: 'inline-block' }}>↻</span>
+            <span className={`sync-icon${syncing ? ' sync-spinning' : ''}`}>↻</span>
             {syncing ? 'Syncing...' : 'Sync GitHub'}
           </Button>
           <Button onClick={() => { setShowCreateForm(!showCreateForm); setError(''); }}>
@@ -270,12 +270,12 @@ const TicketsPage: React.FC = () => {
 
       <div className="tickets-list">
         {filteredTickets.length === 0 ? (
-          <div className="empty-state card" style={{ gridColumn: '1 / -1' }}>
+          <div className="empty-state card empty-state-full-width">
             <span className="empty-state-icon">🎫</span>
-            <p style={{ fontWeight: 600, fontSize: 16, color: 'var(--color-text)', marginBottom: 8 }}>
+            <p className="empty-state-label">
               {searchQuery ? 'No tickets match your search' : statusFilter ? `No tickets with status "${statusFilter}"` : 'No tickets yet'}
             </p>
-            <p style={{ fontSize: 14 }}>
+            <p className="empty-state-hint">
               {!searchQuery && !statusFilter ? 'Create your first ticket to get started.' : 'Try adjusting your filters.'}
             </p>
           </div>

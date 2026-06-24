@@ -121,7 +121,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
         </div>
       )}
 
-      {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
+      {error && <div className="alert alert-error alert-spaced">{error}</div>}
 
       {images.length > 0 && (
         <div className="image-preview-grid">

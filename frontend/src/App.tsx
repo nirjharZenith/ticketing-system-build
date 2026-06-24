@@ -8,13 +8,14 @@ import DashboardPage from './pages/DashboardPage';
 import TicketsPage from './pages/TicketsPage';
 import TicketDetailPage from './pages/TicketDetailPage';
 import AdminMembersPage from './pages/AdminMembersPage';
+import './styles/app.css';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="loading-state" style={{ minHeight: '100vh' }}>
+      <div className="loading-state loading-fullscreen">
         <div className="spinner" />
         <p>Loading...</p>
       </div>
@@ -33,7 +34,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (loading) {
     return (
-      <div className="loading-state" style={{ minHeight: '100vh' }}>
+      <div className="loading-state loading-fullscreen">
         <div className="spinner" />
         <p>Loading...</p>
       </div>
@@ -44,10 +45,10 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const NotFoundPage: React.FC = () => (
-  <div className="loading-state" style={{ minHeight: '100vh', flexDirection: 'column', gap: 16 }}>
-    <div style={{ fontSize: 64, opacity: 0.5 }}>🔍</div>
-    <h2 style={{ fontSize: 24, fontWeight: 700 }}>404 — Page not found</h2>
-    <a href="/dashboard" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>← Back to dashboard</a>
+  <div className="loading-state not-found-page">
+    <div className="not-found-icon">🔍</div>
+    <h2 className="not-found-title">404 — Page not found</h2>
+    <a href="/dashboard" className="not-found-link">← Back to dashboard</a>
   </div>
 );
 
